@@ -31,11 +31,26 @@ export async function middleware(request: NextRequest) {
 
   const {
     data: { user },
+    error: userError,
   } = await supabase.auth.getUser()
+
+  // Debug logging (only in development)
+  if (process.env.NODE_ENV === 'development') {
+    console.log('Middleware:', {
+      path: request.nextUrl.pathname,
+      hasUser: !!user,
+      userEmail: user?.email,
+      cookies: request.cookies.getAll().map(c => c.name),
+      error: userError?.message,
+    })
+  }
 
   // Protect dashboard routes
   if (request.nextUrl.pathname.startsWith('/dashboard')) {
     if (!user) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Redirecting to login - no user found')
+      }
       return NextResponse.redirect(new URL('/login', request.url))
     }
   }

@@ -66,10 +66,12 @@ export default function LoginPage() {
       }
       
       // Wait a moment to ensure cookies are set by Supabase client
-      await new Promise(resolve => setTimeout(resolve, 300))
+      await new Promise(resolve => setTimeout(resolve, 500))
       
       console.log('=== LOGIN SUCCESS - REDIRECTING ===')
-      // Use window.location for full page reload to ensure middleware sees cookies
+      console.log('Cookies before redirect:', document.cookie)
+      
+      // Force a full page reload to ensure middleware sees the cookies
       window.location.href = '/dashboard'
     } catch (error: any) {
       console.error('Login exception:', error)
