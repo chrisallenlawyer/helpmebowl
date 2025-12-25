@@ -55,6 +55,7 @@ export const config = {
     '/dashboard/:path*',
     '/login',
     '/signup',
+    '/auth/callback',
   ],
 }
 
