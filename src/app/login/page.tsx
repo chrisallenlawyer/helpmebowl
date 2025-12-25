@@ -68,12 +68,13 @@ export default function LoginPage() {
       // Force a hard navigation to ensure cookies are set
       console.log('=== REDIRECTING TO DASHBOARD ===')
       console.log('About to call window.location.replace')
+      console.log('You have 5 seconds to read the logs above...')
       
       // Use setTimeout to ensure all logs are visible before redirect
       setTimeout(() => {
         console.log('Executing redirect now...')
         window.location.replace('/dashboard')
-      }, 500)
+      }, 5000) // 5 seconds
     } catch (error: any) {
       console.error('Login exception:', error)
       setError(error.message || 'An error occurred during login')
@@ -146,6 +147,11 @@ export default function LoginPage() {
           {resendSuccess && (
             <div className="bg-green-50 border border-green-400 text-green-700 px-4 py-3 rounded">
               Confirmation email sent! Please check your inbox.
+            </div>
+          )}
+          {loading && (
+            <div className="bg-blue-50 border border-blue-400 text-blue-700 px-4 py-3 rounded">
+              Signing in... Check browser console for detailed logs.
             </div>
           )}
           <div className="rounded-md shadow-sm -space-y-px">
