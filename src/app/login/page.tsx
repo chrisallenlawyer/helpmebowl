@@ -26,21 +26,31 @@ export default function LoginPage() {
         password,
       })
 
+      console.log('Login response:', { data, error })
+
       if (error) {
         console.error('Login error:', error)
-        throw error
+        setError(error.message || 'Login failed. Please check your email and password.')
+        setLoading(false)
+        return
       }
 
-      if (!data.session) {
-        throw new Error('No session created. Please check if your email is confirmed.')
+      if (!data?.session) {
+        console.error('No session in response:', data)
+        setError('No session created. Please check if your email is confirmed.')
+        setLoading(false)
+        return
       }
 
-      console.log('Login successful, redirecting...')
+      console.log('Login successful, session:', data.session)
+      
+      // Wait a moment for cookies to be set, then redirect
+      await new Promise(resolve => setTimeout(resolve, 100))
       
       // Force a hard navigation to ensure cookies are set
       window.location.href = '/dashboard'
     } catch (error: any) {
-      console.error('Login failed:', error)
+      console.error('Login exception:', error)
       setError(error.message || 'An error occurred during login')
       setLoading(false)
     }
