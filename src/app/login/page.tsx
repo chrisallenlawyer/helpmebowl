@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -15,9 +15,6 @@ export default function LoginPage() {
   const router = useRouter()
   const supabase = createClient()
 
-  useEffect(() => {
-    console.log('Login page mounted')
-  }, [])
 
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -29,52 +26,26 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      console.log('Calling Supabase signInWithPassword...')
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
 
-      console.log('Login response:', { data, error, hasSession: !!data?.session, user: data?.user })
-
       if (error) {
-        console.error('Login error:', error)
         setError(error.message || 'Login failed. Please check your email and password.')
         setLoading(false)
         return
       }
 
       if (!data?.session) {
-        console.error('No session in response:', data)
         setError('No session created. Please check your credentials.')
         setLoading(false)
         return
       }
 
-      console.log('Login successful, redirecting to dashboard...')
-      console.log('Session user:', data.session.user.email)
-      
-      // Verify the user is actually logged in
-      const { data: { user: currentUser } } = await supabase.auth.getUser()
-      console.log('Current user after login:', currentUser?.email)
-      
-      if (!currentUser) {
-        console.error('User not found after login!')
-        setError('Failed to establish session. Please try again.')
-        setLoading(false)
-        return
-      }
-      
-      // Wait a moment to ensure cookies are set by Supabase client
-      await new Promise(resolve => setTimeout(resolve, 500))
-      
-      console.log('=== LOGIN SUCCESS - REDIRECTING ===')
-      console.log('Cookies before redirect:', document.cookie)
-      
-      // Force a full page reload to ensure middleware sees the cookies
+      // Redirect to dashboard
       window.location.href = '/dashboard'
     } catch (error: any) {
-      console.error('Login exception:', error)
       setError(error.message || 'An error occurred during login')
       setLoading(false)
     }
