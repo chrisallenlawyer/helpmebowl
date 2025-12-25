@@ -67,14 +67,14 @@ export default function LoginPage() {
       
       // Force a hard navigation to ensure cookies are set
       console.log('=== REDIRECTING TO DASHBOARD ===')
-      console.log('About to call window.location.replace')
-      console.log('You have 5 seconds to read the logs above...')
+      console.log('Session token:', data.session.access_token.substring(0, 20) + '...')
       
-      // Use setTimeout to ensure all logs are visible before redirect
-      setTimeout(() => {
-        console.log('Executing redirect now...')
-        window.location.replace('/dashboard')
-      }, 5000) // 5 seconds
+      // Give a moment for cookies to be set by Supabase client
+      await new Promise(resolve => setTimeout(resolve, 200))
+      
+      // Use window.location for full page reload to ensure middleware sees the session
+      console.log('Executing redirect now...')
+      window.location.href = '/dashboard'
     } catch (error: any) {
       console.error('Login exception:', error)
       setError(error.message || 'An error occurred during login')
