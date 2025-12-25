@@ -40,6 +40,11 @@ export async function middleware(request: NextRequest) {
     }
   }
 
+  // Allow auth callback to proceed without redirect
+  if (request.nextUrl.pathname.startsWith('/auth/callback')) {
+    return response
+  }
+
   // Redirect authenticated users away from auth pages
   if (request.nextUrl.pathname.startsWith('/login') || request.nextUrl.pathname.startsWith('/signup')) {
     if (user) {
