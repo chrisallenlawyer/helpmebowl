@@ -35,6 +35,36 @@ export default function LoginPage() {
     }
   }
 
+  const handleResendConfirmation = async () => {
+    if (!email) {
+      setError('Please enter your email address first')
+      return
+    }
+
+    setResending(true)
+    setError(null)
+    setResendSuccess(false)
+
+    try {
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || window.location.origin
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email,
+        options: {
+          emailRedirectTo: `${appUrl}/auth/callback?next=/dashboard`,
+        },
+      })
+
+      if (error) throw error
+
+      setResendSuccess(true)
+    } catch (error: any) {
+      setError(error.message || 'Failed to resend confirmation email')
+    } finally {
+      setResending(false)
+    }
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
@@ -53,6 +83,23 @@ export default function LoginPage() {
           {error && (
             <div className="bg-red-50 border border-red-400 text-red-700 px-4 py-3 rounded">
               {error}
+              {error.includes('email') && error.includes('confirm') && (
+                <div className="mt-2">
+                  <button
+                    type="button"
+                    onClick={handleResendConfirmation}
+                    disabled={resending}
+                    className="text-sm underline hover:no-underline disabled:opacity-50"
+                  >
+                    {resending ? 'Sending...' : 'Resend confirmation email'}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+          {resendSuccess && (
+            <div className="bg-green-50 border border-green-400 text-green-700 px-4 py-3 rounded">
+              Confirmation email sent! Please check your inbox.
             </div>
           )}
           <div className="rounded-md shadow-sm -space-y-px">
