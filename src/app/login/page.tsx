@@ -19,13 +19,19 @@ export default function LoginPage() {
     console.log('Login page mounted')
   }, [])
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     e.stopPropagation()
     
-    console.log('handleLogin called', { email })
+    console.log('=== LOGIN START ===')
+    console.log('handleLogin called', { email, passwordLength: password.length })
     setError(null)
     setLoading(true)
+    
+    // Prevent any form submission
+    if (e.currentTarget) {
+      e.currentTarget.disabled = true
+    }
 
     try {
       console.log('Calling Supabase signInWithPassword...')
@@ -65,8 +71,14 @@ export default function LoginPage() {
       }
       
       // Force a hard navigation to ensure cookies are set
-      console.log('Redirecting to dashboard...')
-      window.location.replace('/dashboard')
+      console.log('=== REDIRECTING TO DASHBOARD ===')
+      console.log('About to call window.location.replace')
+      
+      // Use setTimeout to ensure all logs are visible before redirect
+      setTimeout(() => {
+        console.log('Executing redirect now...')
+        window.location.replace('/dashboard')
+      }, 500)
     } catch (error: any) {
       console.error('Login exception:', error)
       setError(error.message || 'An error occurred during login')
