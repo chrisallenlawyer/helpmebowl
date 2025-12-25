@@ -217,8 +217,8 @@ export default function FrameByFramePage() {
       )}
 
       {/* Frames Grid */}
-      <div className="bg-white shadow rounded-lg p-4 sm:p-6 mb-6">
-        <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-3 sm:gap-4">
+      <div className="bg-white shadow rounded-lg p-3 sm:p-6 mb-6 overflow-x-auto">
+        <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-2 sm:gap-4 min-w-max sm:min-w-0">
           {frames.map((frame, frameIndex) => {
             const isCurrent = frameIndex === currentFrame
             const isComplete = frameIndex < 9
@@ -232,7 +232,7 @@ export default function FrameByFramePage() {
             return (
               <div
                 key={frameIndex}
-                className={`border-2 rounded-lg p-3 sm:p-4 ${
+                className={`border-2 rounded-lg p-2 sm:p-4 min-w-[80px] sm:min-w-0 ${
                   isCurrent
                     ? 'border-indigo-500 bg-indigo-50 ring-2 ring-indigo-200'
                     : isComplete
@@ -240,14 +240,14 @@ export default function FrameByFramePage() {
                     : 'border-gray-200 bg-white'
                 }`}
               >
-                <div className="text-xs sm:text-sm font-semibold text-gray-600 mb-2">
+                <div className="text-xs font-semibold text-gray-600 mb-1 sm:mb-2">
                   Frame {frameIndex + 1}
-                  {frameIndex === 9 && <span className="block text-xs">(10th)</span>}
+                  {frameIndex === 9 && <span className="block text-[10px] sm:text-xs">(10th)</span>}
                 </div>
 
                 {/* Frame 10 has different layout */}
                 {frameIndex === 9 ? (
-                  <div className="space-y-2">
+                  <div className="space-y-1 sm:space-y-2">
                     <div className="flex gap-1">
                       <input
                         type="number"
@@ -255,7 +255,7 @@ export default function FrameByFramePage() {
                         max="10"
                         value={frame.firstRoll ?? ''}
                         onChange={(e) => handleRollChange(frameIndex, 1, e.target.value)}
-                        className="w-full text-center text-black font-bold text-sm sm:text-base px-2 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                        className="w-full text-center text-black font-bold text-base sm:text-lg px-1 sm:px-2 py-1.5 sm:py-2 border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                         placeholder="1"
                       />
                       <input
@@ -265,7 +265,7 @@ export default function FrameByFramePage() {
                         value={frame.secondRoll ?? ''}
                         onChange={(e) => handleRollChange(frameIndex, 2, e.target.value)}
                         disabled={frame.firstRoll === null}
-                        className="w-full text-center text-black font-bold text-sm sm:text-base px-2 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                        className="w-full text-center text-black font-bold text-base sm:text-lg px-1 sm:px-2 py-1.5 sm:py-2 border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                         placeholder="2"
                       />
                     </div>
@@ -277,7 +277,7 @@ export default function FrameByFramePage() {
                         value={frame.thirdRoll ?? ''}
                         onChange={(e) => handleRollChange(frameIndex, 3, e.target.value)}
                         disabled={frame.secondRoll === null}
-                        className="w-full text-center text-black font-bold text-sm sm:text-base px-2 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                        className="w-full text-center text-black font-bold text-base sm:text-lg px-1 sm:px-2 py-1.5 sm:py-2 border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                         placeholder="3"
                       />
                     )}
@@ -290,7 +290,7 @@ export default function FrameByFramePage() {
                       max="10"
                       value={frame.firstRoll ?? ''}
                       onChange={(e) => handleRollChange(frameIndex, 1, e.target.value)}
-                      className={`flex-1 text-center text-black font-bold text-sm sm:text-base px-2 py-2 border rounded ${
+                      className={`flex-1 text-center text-black font-bold text-base sm:text-lg px-1 sm:px-2 py-1.5 sm:py-2 border rounded ${
                         frame.isStrike
                           ? 'bg-indigo-100 border-indigo-300'
                           : 'border-gray-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500'
@@ -305,7 +305,7 @@ export default function FrameByFramePage() {
                         value={frame.secondRoll ?? ''}
                         onChange={(e) => handleRollChange(frameIndex, 2, e.target.value)}
                         disabled={frame.firstRoll === null}
-                        className={`flex-1 text-center text-black font-bold text-sm sm:text-base px-2 py-2 border rounded ${
+                        className={`flex-1 text-center text-black font-bold text-base sm:text-lg px-1 sm:px-2 py-1.5 sm:py-2 border rounded ${
                           frame.isSpare
                             ? 'bg-purple-100 border-purple-300'
                             : 'border-gray-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 disabled:cursor-not-allowed'
@@ -314,7 +314,7 @@ export default function FrameByFramePage() {
                       />
                     )}
                     {frame.isStrike && (
-                      <div className="flex-1 flex items-center justify-center bg-indigo-100 border border-indigo-300 rounded font-bold text-indigo-700 text-xs sm:text-sm">
+                      <div className="flex-1 flex items-center justify-center bg-indigo-100 border border-indigo-300 rounded font-bold text-indigo-700 text-base sm:text-lg py-1.5 sm:py-2">
                         X
                       </div>
                     )}
@@ -323,8 +323,8 @@ export default function FrameByFramePage() {
 
                 {/* Display frame score */}
                 {frame.score !== null && (
-                  <div className="mt-2 text-center">
-                    <div className="text-lg sm:text-xl font-bold text-gray-900">
+                  <div className="mt-1 sm:mt-2 text-center">
+                    <div className="text-base sm:text-xl font-bold text-gray-900">
                       {frame.score}
                     </div>
                   </div>
