@@ -21,18 +21,17 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
 
       if (error) throw error
 
-      router.push('/dashboard')
-      router.refresh()
+      // Force a hard navigation to ensure cookies are set
+      window.location.href = '/dashboard'
     } catch (error: any) {
       setError(error.message || 'An error occurred during login')
-    } finally {
       setLoading(false)
     }
   }
@@ -85,7 +84,7 @@ export default function LoginPage() {
           {error && (
             <div className="bg-red-50 border border-red-400 text-red-700 px-4 py-3 rounded">
               {error}
-              {error.includes('email') && error.includes('confirm') && (
+              {error.includes('email') && (error.includes('confirm') || error.includes('Email')) && (
                 <div className="mt-2">
                   <button
                     type="button"
@@ -158,4 +157,3 @@ export default function LoginPage() {
     </div>
   )
 }
-
