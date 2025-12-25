@@ -65,11 +65,12 @@ export default function LoginPage() {
         return
       }
       
-      // The Supabase client should have set cookies automatically
-      // Use router.push and refresh to ensure client-side state is updated
+      // Wait a moment to ensure cookies are set by Supabase client
+      await new Promise(resolve => setTimeout(resolve, 300))
+      
       console.log('=== LOGIN SUCCESS - REDIRECTING ===')
-      router.push('/dashboard')
-      router.refresh()
+      // Use window.location for full page reload to ensure middleware sees cookies
+      window.location.href = '/dashboard'
     } catch (error: any) {
       console.error('Login exception:', error)
       setError(error.message || 'An error occurred during login')
