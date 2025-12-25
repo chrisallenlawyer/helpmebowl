@@ -28,12 +28,20 @@ export default async function GamesPage() {
             View and manage your bowling game history
           </p>
         </div>
-        <Link
-          href="/dashboard/games/new"
-          className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-indigo-700"
-        >
-          Add New Game
-        </Link>
+        <div className="flex gap-2 flex-wrap">
+          <Link
+            href="/dashboard/games/frame-by-frame"
+            className="bg-purple-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-purple-700 text-sm sm:text-base"
+          >
+            Frame-by-Frame
+          </Link>
+          <Link
+            href="/dashboard/games/new"
+            className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-indigo-700 text-sm sm:text-base"
+          >
+            Quick Add
+          </Link>
+        </div>
       </div>
 
       {error && (

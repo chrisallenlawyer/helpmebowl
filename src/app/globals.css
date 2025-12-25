@@ -26,3 +26,23 @@ body {
   }
 }
 
+/* Ensure input fields have dark, readable text */
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+input[type="date"],
+textarea,
+select {
+  color: #000000 !important;
+}
+
+input[type="text"]::placeholder,
+input[type="email"]::placeholder,
+input[type="password"]::placeholder,
+input[type="number"]::placeholder,
+input[type="date"]::placeholder,
+textarea::placeholder {
+  color: #9ca3af !important;
+}
+
