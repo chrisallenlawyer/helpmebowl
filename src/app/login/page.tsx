@@ -26,7 +26,7 @@ export default function LoginPage() {
         password,
       })
 
-      console.log('Login response:', { data, error })
+      console.log('Login response:', { data, error, hasSession: !!data?.session, user: data?.user })
 
       if (error) {
         console.error('Login error:', error)
@@ -37,18 +37,27 @@ export default function LoginPage() {
 
       if (!data?.session) {
         console.error('No session in response:', data)
-        setError('No session created. Please check if your email is confirmed.')
+        setError('No session created. Please check your credentials.')
         setLoading(false)
         return
       }
 
-      console.log('Login successful, session:', data.session)
+      console.log('Login successful, redirecting to dashboard...')
+      console.log('Session user:', data.session.user.email)
       
-      // Wait a moment for cookies to be set, then redirect
-      await new Promise(resolve => setTimeout(resolve, 100))
+      // Verify the user is actually logged in
+      const { data: { user: currentUser } } = await supabase.auth.getUser()
+      console.log('Current user after login:', currentUser?.email)
+      
+      if (!currentUser) {
+        console.error('User not found after login!')
+        setError('Failed to establish session. Please try again.')
+        setLoading(false)
+        return
+      }
       
       // Force a hard navigation to ensure cookies are set
-      window.location.href = '/dashboard'
+      window.location.replace('/dashboard')
     } catch (error: any) {
       console.error('Login exception:', error)
       setError(error.message || 'An error occurred during login')
