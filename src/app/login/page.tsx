@@ -26,11 +26,21 @@ export default function LoginPage() {
         password,
       })
 
-      if (error) throw error
+      if (error) {
+        console.error('Login error:', error)
+        throw error
+      }
 
+      if (!data.session) {
+        throw new Error('No session created. Please check if your email is confirmed.')
+      }
+
+      console.log('Login successful, redirecting...')
+      
       // Force a hard navigation to ensure cookies are set
       window.location.href = '/dashboard'
     } catch (error: any) {
+      console.error('Login failed:', error)
       setError(error.message || 'An error occurred during login')
       setLoading(false)
     }
