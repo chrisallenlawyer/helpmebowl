@@ -27,11 +27,6 @@ export default function LoginPage() {
     console.log('handleLogin called', { email, passwordLength: password.length })
     setError(null)
     setLoading(true)
-    
-    // Prevent any form submission
-    if (e.currentTarget) {
-      e.currentTarget.disabled = true
-    }
 
     try {
       console.log('Calling Supabase signInWithPassword...')
