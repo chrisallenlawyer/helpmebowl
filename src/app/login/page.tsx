@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -15,12 +15,20 @@ export default function LoginPage() {
   const router = useRouter()
   const supabase = createClient()
 
+  useEffect(() => {
+    console.log('Login page mounted')
+  }, [])
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
+    e.stopPropagation()
+    
+    console.log('handleLogin called', { email })
     setError(null)
     setLoading(true)
 
     try {
+      console.log('Calling Supabase signInWithPassword...')
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -57,6 +65,7 @@ export default function LoginPage() {
       }
       
       // Force a hard navigation to ensure cookies are set
+      console.log('Redirecting to dashboard...')
       window.location.replace('/dashboard')
     } catch (error: any) {
       console.error('Login exception:', error)
@@ -109,7 +118,7 @@ export default function LoginPage() {
             </Link>
           </p>
         </div>
-        <form className="mt-8 space-y-6" onSubmit={handleLogin}>
+        <form className="mt-8 space-y-6" onSubmit={handleLogin} noValidate>
           {error && (
             <div className="bg-red-50 border border-red-400 text-red-700 px-4 py-3 rounded">
               {error}
