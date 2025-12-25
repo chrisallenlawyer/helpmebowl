@@ -91,6 +91,20 @@ export default async function DashboardPage() {
           <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">Quick Actions</h3>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <Link
+              href="/dashboard/games/frame-by-frame"
+              className="relative rounded-lg border border-gray-300 bg-white px-6 py-5 shadow-sm flex items-center space-x-3 hover:border-gray-400 focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-indigo-500"
+            >
+              <div className="flex-shrink-0">
+                <div className="text-2xl">🎳</div>
+              </div>
+              <div className="flex-1 min-w-0">
+                <span className="absolute inset-0" aria-hidden="true" />
+                <p className="text-sm font-medium text-gray-900">Frame-by-Frame</p>
+                <p className="text-sm text-gray-500 truncate">Enter game frame by frame with max score</p>
+              </div>
+            </Link>
+
+            <Link
               href="/dashboard/games/new"
               className="relative rounded-lg border border-gray-300 bg-white px-6 py-5 shadow-sm flex items-center space-x-3 hover:border-gray-400 focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-indigo-500"
             >
@@ -99,8 +113,8 @@ export default async function DashboardPage() {
               </div>
               <div className="flex-1 min-w-0">
                 <span className="absolute inset-0" aria-hidden="true" />
-                <p className="text-sm font-medium text-gray-900">Add New Game</p>
-                <p className="text-sm text-gray-500 truncate">Record a bowling score</p>
+                <p className="text-sm font-medium text-gray-900">Quick Add Game</p>
+                <p className="text-sm text-gray-500 truncate">Enter final score only</p>
               </div>
             </Link>
 
