@@ -30,6 +30,7 @@ export default function OCRPage() {
   const [extractedFrames, setExtractedFrames] = useState<Frame[] | null>(null)
   const [detectedNumbers, setDetectedNumbers] = useState<number[]>([])
   const [showManualEntry, setShowManualEntry] = useState(false)
+  const [detectedText, setDetectedText] = useState<string | null>(null)
   const [manualFrameScores, setManualFrameScores] = useState<(number | null)[]>([null, null, null, null, null, null, null, null, null, null])
   const [manualTotal, setManualTotal] = useState<number | null>(null)
   const [editingFrames, setEditingFrames] = useState(false)
