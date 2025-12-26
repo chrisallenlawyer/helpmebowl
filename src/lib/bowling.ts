@@ -20,6 +20,27 @@ export type GameState = Frame[]
  * Assumes all remaining frames are strikes
  */
 export function calculateMaxScore(gameState: GameState, currentFrame: number): number {
+  // If all frames are complete (currentFrame === 10), return the final score
+  if (currentFrame >= 10) {
+    const lastFrame = gameState[9]
+    if (lastFrame && lastFrame.score !== null) {
+      return lastFrame.score
+    }
+    // If frame 10 doesn't have a score but is complete, calculate it
+    if (lastFrame && lastFrame.firstRoll !== null && lastFrame.secondRoll !== null) {
+      if (lastFrame.isStrike && lastFrame.thirdRoll !== null && lastFrame.thirdRoll !== undefined) {
+        const prevScore = gameState[8]?.score || 0
+        return prevScore + 10 + (lastFrame.secondRoll || 0) + (lastFrame.thirdRoll || 0)
+      } else if (lastFrame.isSpare && lastFrame.thirdRoll !== null && lastFrame.thirdRoll !== undefined) {
+        const prevScore = gameState[8]?.score || 0
+        return prevScore + 10 + (lastFrame.thirdRoll || 0)
+      } else if (lastFrame.isOpen) {
+        const prevScore = gameState[8]?.score || 0
+        return prevScore + (lastFrame.firstRoll || 0) + (lastFrame.secondRoll || 0)
+      }
+    }
+  }
+
   // Find the last completed frame's score
   let baseScore = 0
   for (let i = 0; i < currentFrame; i++) {
