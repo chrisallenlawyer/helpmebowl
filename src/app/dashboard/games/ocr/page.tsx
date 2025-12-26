@@ -28,7 +28,6 @@ export default function OCRPage() {
   const [detectedBowlers, setDetectedBowlers] = useState<DetectedBowler[]>([])
   const [selectedBowlerIndex, setSelectedBowlerIndex] = useState<number | null>(null)
   const [extractedFrames, setExtractedFrames] = useState<Frame[] | null>(null)
-  const [editingFrames, setEditingFrames] = useState(true) // Start with editing enabled
   const [gameState, setGameState] = useState<GameState | null>(null)
   const [currentFrame, setCurrentFrame] = useState(0)
   const [maxScore, setMaxScore] = useState(300)
