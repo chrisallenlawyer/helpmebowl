@@ -495,8 +495,9 @@ export default function OCRPage() {
             if (bonus >= 1 && bonus <= 9 && (Math.abs(bonus - estimatedNextFirstRoll) <= 2 || bonus === nextFramePoints)) {
               // Likely a spare - bonus matches next frame's first roll
               // Estimate first roll for this frame (must be < 10 to leave pins for spare)
-              frames[i].firstRoll = bonus // Use bonus as first roll estimate
-              frames[i].secondRoll = 10 - frames[i].firstRoll // Complete the spare
+              const firstRoll = bonus // Use bonus as first roll estimate
+              frames[i].firstRoll = firstRoll
+              frames[i].secondRoll = 10 - firstRoll // Complete the spare
               frames[i].isSpare = true
             } else {
               // More likely a strike with bonus
