@@ -221,8 +221,11 @@ export default function OCRPage() {
       // This should contain X, /, and numbers representing individual balls
       // Skip name lines (mostly letters) and look for lines with bowling score characters
       // Search up to 6 lines back to find the ball results line
+      // Also check if the ball results might be split across multiple lines
       let ballResultsLine: string | null = null
       let ballResultsLineIndex: number | null = null
+      
+      // First, try to find a single line with bowling score characters
       for (let i = lineIndex - 1; i >= Math.max(0, lineIndex - 7); i--) {
         // Skip if this line has already been used for another bowler
         if (usedBallResultsLineIndices.has(i)) {
@@ -238,12 +241,44 @@ export default function OCRPage() {
         const hasStrikeOrSpare = /[Xx\/]/.test(candidateLine)
         
         // If it has bowling characters (X, /, digits) and not mostly letters, it's likely the ball results
-        // Also ensure it's not too short (at least 5 characters to avoid false positives)
-        if ((hasStrikeOrSpare || digitCount > 3) && letterCount < candidateLine.length * 0.5 && candidateLine.length >= 5) {
-          ballResultsLine = candidateLine
-          ballResultsLineIndex = i
-          usedBallResultsLineIndices.add(i)
-          console.log(`  Found ball results line for ${bowlerName || 'unknown'} at line ${i}: "${ballResultsLine}"`)
+        // Look for longer lines that contain multiple bowling score patterns (likely the full ball results)
+        // Prefer lines with more bowling characters (X, /, digits) and fewer letters
+        const bowlingCharCount = (candidateLine.match(/[Xx\/\d-]/g) || []).length
+        const isLikelyBallResults = (hasStrikeOrSpare || digitCount > 3) && 
+                                    letterCount < candidateLine.length * 0.5 && 
+                                    candidateLine.length >= 5 &&
+                                    bowlingCharCount >= 5 // At least 5 bowling-related characters
+        
+        if (isLikelyBallResults) {
+          // Check if there are more lines above that might be part of the same ball results
+          // Sometimes OCR splits the ball results across multiple lines
+          let combinedLine = candidateLine
+          let combinedIndex = i
+          
+          // Try to combine with previous lines if they also look like ball results
+          for (let j = i - 1; j >= Math.max(0, i - 2); j--) {
+            if (usedBallResultsLineIndices.has(j)) break
+            
+            const prevLine = lines[j].trim()
+            const prevLetterCount = (prevLine.match(/[A-Za-z]/g) || []).length
+            const prevDigitCount = (prevLine.match(/\d/g) || []).length
+            const prevHasStrikeOrSpare = /[Xx\/]/.test(prevLine)
+            const prevBowlingCharCount = (prevLine.match(/[Xx\/\d-]/g) || []).length
+            
+            // If previous line also looks like ball results (not a name), combine them
+            if (prevHasStrikeOrSpare || (prevDigitCount > 2 && prevLetterCount < prevLine.length * 0.3)) {
+              combinedLine = prevLine + ' ' + combinedLine
+              combinedIndex = j
+              usedBallResultsLineIndices.add(j)
+            } else {
+              break
+            }
+          }
+          
+          ballResultsLine = combinedLine
+          ballResultsLineIndex = combinedIndex
+          usedBallResultsLineIndices.add(combinedIndex)
+          console.log(`  Found ball results line for ${bowlerName || 'unknown'} at line ${combinedIndex}: "${ballResultsLine}"`)
           break
         }
       }
