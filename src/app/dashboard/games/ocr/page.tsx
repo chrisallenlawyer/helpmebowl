@@ -454,29 +454,35 @@ export default function OCRPage() {
           continue
         }
         
-        if (points >= 20) {
-          // Strike (10) + bonus from next frame(s)
-          // Points = 10 + next two rolls
+        // In bowling, frame points are:
+        // - Strike: 10 + next two rolls (10-30 total)
+        // - Spare: 10 + next one roll (10-20 total, but usually 10-19)
+        // - Open: sum of two rolls (0-9 total)
+        
+        if (points > 10) {
+          // Must be a strike (10 + bonus from next frame)
+          // Bonus can range from 0-20 (next two rolls)
           frames[i].firstRoll = 10
           frames[i].isStrike = true
-        } else if (points >= 10 && points < 20) {
-          // Could be spare (10 total) or strike with low bonus
-          // If points is exactly 10, more likely a spare
-          // If points > 10, more likely a strike with some bonus
-          if (points === 10) {
-            // Default to spare - split pins evenly
+        } else if (points === 10) {
+          // Could be spare or strike with 0+0 bonus (rare)
+          // Check if next frame helps us decide
+          if (i + 1 < 10 && framePoints[i + 1] > 0) {
+            // Next frame has points, so this is likely a spare
+            // (strike with 0+0 bonus would mean next frame is also strike, less common)
             frames[i].firstRoll = 5
             frames[i].secondRoll = 5
             frames[i].isSpare = true
           } else {
-            // Strike with bonus (between 10 and 20 total)
-            frames[i].firstRoll = 10
-            frames[i].isStrike = true
+            // Default to spare if we can't tell
+            frames[i].firstRoll = 5
+            frames[i].secondRoll = 5
+            frames[i].isSpare = true
           }
         } else if (points < 10 && points > 0) {
           // Open frame - split pins (try to make it reasonable)
-          // Prefer first roll to be higher than second for better UX
-          const firstRoll = Math.max(0, Math.min(9, Math.ceil(points * 0.6)))
+          // Prefer first roll to be slightly higher than second for better UX
+          const firstRoll = Math.max(0, Math.min(9, Math.ceil(points * 0.55)))
           const secondRoll = Math.max(0, points - firstRoll)
           frames[i].firstRoll = firstRoll
           frames[i].secondRoll = secondRoll
