@@ -13,7 +13,7 @@ interface DetectedBowler {
   frameScores: (number | null)[]
   totalScore: number | null
   confidence: number
-  individualBalls?: Array<{ first: number | 'X' | null; second: number | '/' | null }>
+  individualBalls?: Array<{ first: number | 'X' | null; second: number | '/' | null; third?: number | 'X' | '/' | null }>
 }
 
 export default function OCRPage() {
