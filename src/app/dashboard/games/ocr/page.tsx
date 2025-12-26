@@ -286,8 +286,17 @@ export default function OCRPage() {
         const hasValidRange = candidateFrames.every(f => f >= 0 && f <= 300)
         
         if (hasValidRange) {
-          // Check if cumulative (higher confidence)
+          // Check if cumulative (much higher confidence)
           const isCumulative = candidateFrames.every((f, i) => i === 0 || f >= candidateFrames[i - 1])
+          
+          // Additional validation: Check if final score is reasonable (should be >= last frame)
+          const finalScoreValid = !candidateTotal || candidateTotal >= candidateFrames[9]
+          
+          // Filter out sequences that are clearly wrong:
+          // - If not cumulative and final score doesn't make sense, skip it
+          if (!isCumulative && !finalScoreValid) {
+            continue
+          }
           
           // Avoid duplicates
           const isDuplicate = bowlers.some(b => 
@@ -297,12 +306,22 @@ export default function OCRPage() {
           )
           
           if (!isDuplicate) {
+            // Calculate confidence based on how "bowling-like" the sequence is
+            let confidence = 0.3
+            if (isCumulative) confidence += 0.4
+            if (finalScoreValid) confidence += 0.2
+            // Prefer sequences where numbers increase more smoothly
+            const smoothIncrease = candidateFrames.every((f, i) => 
+              i === 0 || f - candidateFrames[i - 1] >= 0 && f - candidateFrames[i - 1] <= 30
+            )
+            if (smoothIncrease) confidence += 0.1
+            
             bowlers.push({
               frameScores: candidateFrames,
               totalScore: candidateTotal,
-              confidence: isCumulative ? 0.7 : 0.4,
+              confidence: Math.min(confidence, 1.0),
             })
-            console.log('Found candidate sequence:', candidateFrames, candidateTotal)
+            console.log('Found candidate sequence:', candidateFrames, candidateTotal, 'confidence:', confidence.toFixed(2))
           }
         }
       }
@@ -358,10 +377,68 @@ export default function OCRPage() {
       
       // Sort by confidence, prefer cumulative sequences
       bowlers.sort((a, b) => b.confidence - a.confidence)
+      
+      // Filter to only keep high-confidence sequences (>= 0.5) or top 2 if none are high confidence
+      const highConfidence = bowlers.filter(b => b.confidence >= 0.5)
+      if (highConfidence.length >= 2) {
+        bowlers = highConfidence.slice(0, 2)
+      } else {
+        // Take top 2 by confidence
+        bowlers = bowlers.slice(0, 2)
+      }
     }
 
-    console.log('Final bowlers detected:', bowlers.length)
-    return bowlers.slice(0, 3) // Limit to 3 bowlers max
+    // Try to extract names for detected bowlers using word positions
+    if (words && words.length > 0 && bowlers.length > 0) {
+      // Group words by Y position again to find rows with names
+      const rows: any[][] = []
+      const yTolerance = 25 // Increased for tilted images
+      
+      words.forEach(word => {
+        const wordY = word.bbox.y0
+        let foundRow = false
+        for (const row of rows) {
+          if (row.length > 0) {
+            const rowY = row[0].bbox.y0
+            if (Math.abs(wordY - rowY) < yTolerance) {
+              row.push(word)
+              foundRow = true
+              break
+            }
+          }
+        }
+        if (!foundRow) {
+          rows.push([word])
+        }
+      })
+      
+      rows.forEach(row => row.sort((a, b) => a.bbox.x0 - b.bbox.x0))
+      rows.sort((a, b) => (a[0]?.bbox.y0 || 0) - (b[0]?.bbox.y0 || 0))
+      
+      // Try to match bowlers to rows and extract names
+      // For now, just take first 2 rows as potential names
+      rows.slice(0, 2).forEach((row, index) => {
+        if (bowlers[index]) {
+          // Look for text words (not numbers) at the start of the row
+          const nameWords: string[] = []
+          for (let i = 0; i < Math.min(3, row.length); i++) {
+            const text = row[i].text.trim()
+            // Skip if it's just a number
+            if (!/^\d+$/.test(text) && text.length > 1) {
+              nameWords.push(text)
+            } else {
+              break // Stop at first number
+            }
+          }
+          if (nameWords.length > 0) {
+            bowlers[index].name = nameWords.join(' ')
+          }
+        }
+      })
+    }
+
+    console.log('Final bowlers detected:', bowlers.length, bowlers.map(b => ({ name: b.name, frames: b.frameScores, total: b.totalScore, conf: b.confidence.toFixed(2) })))
+    return bowlers.slice(0, 2) // Limit to 2 bowlers max
   }
 
   const extractFramesFromBowler = (bowler: DetectedBowler) => {
@@ -730,7 +807,7 @@ export default function OCRPage() {
                 <div className="flex justify-between items-start">
                   <div>
                     <div className="font-semibold text-gray-900">
-                      Bowler {index + 1}
+                      {bowler.name || `Bowler ${index + 1}`}
                     </div>
                     <div className="text-sm text-gray-600 mt-1">
                       Frames: {bowler.frameScores.filter(f => f !== null).length}/10
