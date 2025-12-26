@@ -212,7 +212,21 @@ export default function OCRPage() {
       
       // Look for the individual ball results row (the line immediately before cumulative totals)
       // This should contain X, /, and numbers representing individual balls
-      const ballResultsLine = lineIndex > 0 ? lines[lineIndex - 1].trim() : null
+      // Skip name lines (mostly letters) and look for lines with bowling score characters
+      let ballResultsLine: string | null = null
+      for (let i = lineIndex - 1; i >= Math.max(0, lineIndex - 3); i--) {
+        const candidateLine = lines[i].trim()
+        // Skip lines that are mostly letters (names)
+        const letterCount = (candidateLine.match(/[A-Za-z]/g) || []).length
+        const digitCount = (candidateLine.match(/\d/g) || []).length
+        const hasStrikeOrSpare = /[Xx\/]/.test(candidateLine)
+        
+        // If it has bowling characters (X, /, digits) and not mostly letters, it's likely the ball results
+        if ((hasStrikeOrSpare || digitCount > 3) && letterCount < candidateLine.length * 0.5) {
+          ballResultsLine = candidateLine
+          break
+        }
+      }
       
       // Parse individual ball results if available
       let individualBalls: Array<{ first: number | 'X' | null; second: number | '/' | null; third?: number | 'X' | '/' | null }> = []
