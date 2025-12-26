@@ -415,9 +415,10 @@ export default function OCRPage() {
     }))
 
     // Helper function to infer rolls from cumulative scores
+    // Work forwards, using the actual scoring rules to determine what rolls must have been
     const inferRollsFromCumulative = () => {
-      // First pass: Calculate frame points and identify obvious patterns
-      const framePoints: (number | null)[] = []
+      // Calculate points added each frame
+      const framePoints: number[] = []
       for (let i = 0; i < 10; i++) {
         if (bowler.frameScores[i] !== null) {
           const cumulativeScore = bowler.frameScores[i] as number
@@ -425,111 +426,74 @@ export default function OCRPage() {
             ? bowler.frameScores[i - 1] as number 
             : 0
           framePoints[i] = cumulativeScore - previousScore
-          frames[i].score = cumulativeScore
-          frames[i].frameScore = framePoints[i]
         } else {
-          framePoints[i] = null
+          framePoints[i] = 0
         }
       }
 
-      // Second pass: Work backwards from frame 9 to frame 1 to determine frame types
-      // We need to account for bonuses from strikes and spares
-      for (let i = 8; i >= 0; i--) {
-        if (framePoints[i] === null) continue
+      // Work forwards frame by frame
+      for (let i = 0; i < 9; i++) {
+        const points = framePoints[i]
         
-        const points = framePoints[i] as number
-        
-        // Check if next frames have data to calculate bonuses
-        if (i + 1 < 10 && framePoints[i + 1] !== null) {
-          const nextFramePoints = framePoints[i + 1] as number
-          
-          // If points >= 20, it's likely a strike (10 + next two rolls)
-          // Minimum bonus from next frame would be 0+0 = 10, so >= 20 means strike
-          if (points >= 20) {
+        if (points >= 30) {
+          // Strike followed by two strikes
+          frames[i].firstRoll = 10
+          frames[i].isStrike = true
+        } else if (points >= 20 && points < 30) {
+          // Strike (10) + bonus from next frame(s)
+          // Points = 10 + next two rolls, so bonus = points - 10
+          frames[i].firstRoll = 10
+          frames[i].isStrike = true
+        } else if (points === 10) {
+          // Could be spare or strike with 0+0 bonus
+          // Check next frame to help decide
+          if (i + 1 < 10 && framePoints[i + 1] > 0) {
+            // If next frame has points, it's more likely a spare
+            // (strike with 0+0 would mean next frame was a strike, which is less common)
+            frames[i].firstRoll = 5
+            frames[i].secondRoll = 5
+            frames[i].isSpare = true
+          } else {
+            // Default to strike if next frame is 0 or we're not sure
             frames[i].firstRoll = 10
             frames[i].isStrike = true
-            // We can't determine the exact next two rolls from cumulative alone
-            // But we can estimate based on the points
-            // For now, we'll leave secondRoll null - it will be calculated by the scoring logic
-          } else if (points === 10) {
-            // Could be spare or strike with 0+0 bonus
-            // Check if it makes sense as a spare based on next frame
-            if (i + 1 < 10 && framePoints[i + 1] !== null) {
-              const nextPoints = framePoints[i + 1] as number
-              // If next frame starts high, it's more likely a strike
-              // Otherwise, default to spare
-              if (nextPoints >= 20) {
-                frames[i].firstRoll = 10
-                frames[i].isStrike = true
-              } else {
-                // Default to spare - split pins evenly
-                frames[i].firstRoll = 5
-                frames[i].secondRoll = 5
-                frames[i].isSpare = true
-              }
-            } else {
-              // Default to spare if we can't tell
-              frames[i].firstRoll = 5
-              frames[i].secondRoll = 5
-              frames[i].isSpare = true
-            }
-          } else if (points < 10) {
-            // Open frame - split pins
-            // Try to make it reasonable (e.g., if points = 9, could be 5+4, 6+3, etc.)
-            const firstRoll = Math.floor(points / 2)
-            frames[i].firstRoll = firstRoll
-            frames[i].secondRoll = points - firstRoll
-            frames[i].isOpen = true
           }
-          } else {
-            // No next frame data, use simple heuristics
-            if (points >= 20) {
-              frames[i].firstRoll = 10
-              frames[i].isStrike = true
-            } else if (points === 10) {
-              frames[i].firstRoll = 5
-              frames[i].secondRoll = 5
-              frames[i].isSpare = true
-            } else {
-              const firstRoll = Math.floor(points / 2)
-              frames[i].firstRoll = firstRoll
-              frames[i].secondRoll = points - firstRoll
-              frames[i].isOpen = true
-            }
-          }
+        } else if (points < 10) {
+          // Open frame - split pins (try to make it reasonable)
+          const firstRoll = Math.max(0, Math.min(9, Math.floor(points / 2)))
+          const secondRoll = Math.max(0, points - firstRoll)
+          frames[i].firstRoll = firstRoll
+          frames[i].secondRoll = secondRoll
+          frames[i].isOpen = true
+        }
       }
 
       // Handle frame 10 separately
-      if (framePoints[9] !== null) {
-        const points = framePoints[9] as number
-        const prevScore = bowler.frameScores[8] !== null ? bowler.frameScores[8] as number : 0
-        
-        if (points >= 20) {
-          // Strike or spare with bonus
-          frames[9].firstRoll = 10
-          frames[9].isStrike = true
-          // Estimate second and third rolls
-          const remaining = points - 10
-          if (remaining >= 10) {
-            frames[9].secondRoll = 10
-            frames[9].thirdRoll = remaining - 10
-          } else {
-            frames[9].secondRoll = Math.floor(remaining / 2)
-            frames[9].thirdRoll = remaining - frames[9].secondRoll
-          }
-        } else if (points === 10) {
-          // Spare
-          frames[9].firstRoll = 5
-          frames[9].secondRoll = 5
-          frames[9].isSpare = true
-          frames[9].thirdRoll = 0 // Default
+      const frame10Points = framePoints[9]
+      if (frame10Points >= 20) {
+        // Strike or spare with bonus (third roll)
+        frames[9].firstRoll = 10
+        frames[9].isStrike = true
+        const remaining = frame10Points - 10
+        if (remaining >= 10) {
+          frames[9].secondRoll = 10
+          frames[9].thirdRoll = remaining - 10
         } else {
-          // Open frame
-          const firstRoll = Math.floor(points / 2)
-          frames[9].firstRoll = firstRoll
-          frames[9].secondRoll = points - firstRoll
-          frames[9].isOpen = true
+          frames[9].secondRoll = Math.floor(remaining / 2)
+          frames[9].thirdRoll = remaining - (frames[9].secondRoll || 0)
         }
+      } else if (frame10Points === 10) {
+        // Spare
+        frames[9].firstRoll = 5
+        frames[9].secondRoll = 5
+        frames[9].isSpare = true
+        frames[9].thirdRoll = 0
+      } else if (frame10Points < 10) {
+        // Open frame
+        const firstRoll = Math.max(0, Math.min(9, Math.floor(frame10Points / 2)))
+        frames[9].firstRoll = firstRoll
+        frames[9].secondRoll = frame10Points - firstRoll
+        frames[9].isOpen = true
       }
     }
 
