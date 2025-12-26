@@ -895,9 +895,22 @@ export default function OCRPage() {
         setUploadingPhoto(false)
       }
 
+      // Always use the OCR cumulative total score (which is accurate)
+      // Don't use the recalculated score from inferred rolls as it may be inaccurate
+      const finalScore = detectedBowlers[selectedBowlerIndex]?.totalScore || 0
+      
       // Use current gameState if available, otherwise calculate from extracted frames
       const finalGameState = gameState || (extractedFrames ? getGameStateFromFrames(extractedFrames) : null)
-      const finalScore = finalGameState?.[9]?.score || detectedBowlers[selectedBowlerIndex]?.totalScore || 0
+      
+      // Update frame scores to match OCR cumulative scores (they're the source of truth)
+      if (finalGameState && detectedBowlers[selectedBowlerIndex]) {
+        const ocrScores = detectedBowlers[selectedBowlerIndex].frameScores
+        for (let i = 0; i < 10; i++) {
+          if (ocrScores[i] !== null) {
+            finalGameState[i].score = ocrScores[i] as number
+          }
+        }
+      }
 
       // Save game to database
       const { error } = await supabase.from('games').insert({
