@@ -103,12 +103,12 @@ export default function OCRPage() {
     try {
       const worker = await createWorker('eng')
       
-      // Perform OCR
-      const { data: { text, confidence } } = await worker.recognize(imageFile)
+      // Perform OCR with detailed output including word positions
+      const { data } = await worker.recognize(imageFile)
       await worker.terminate()
 
-      // Parse the OCR text to find bowling scores
-      const bowlers = parseBowlingScores(text)
+      // Parse the OCR data to find bowling scores using both text and structure
+      const bowlers = parseBowlingScores(data.text, data.words || [])
       
       if (bowlers.length === 0) {
         setError('No bowling scores detected in the image. Please try again with a clearer photo.')
@@ -127,73 +127,179 @@ export default function OCRPage() {
     }
   }
 
-  const parseBowlingScores = (text: string): DetectedBowler[] => {
+  const parseBowlingScores = (text: string, words: any[]): DetectedBowler[] => {
     const bowlers: DetectedBowler[] = []
-    const lines = text.split('\n').filter(line => line.trim().length > 0)
     
-    // Try to find patterns that look like bowling scores
-    // Common patterns: numbers in sequence (10 frames), totals at end
-    
-    // Look for sequences of numbers that could be frame scores
-    const framePattern = /\b([0-9]{1,3})\b/g
-    const numbers: number[] = []
-    let match
-    
-    while ((match = framePattern.exec(text)) !== null) {
-      const num = parseInt(match[1])
-      if (num >= 0 && num <= 300) {
-        numbers.push(num)
-      }
+    // Strategy 1: Use word positions to detect tabular structure (rows = bowlers, columns = frames)
+    if (words && words.length > 0) {
+      // Group words by approximate Y position (rows)
+      const rows: any[][] = []
+      const yTolerance = 10 // pixels - words on same row should have similar Y
+      
+      words
+        .filter(w => {
+          // Filter to numbers that could be scores
+          const num = parseInt(w.text.trim().replace(/[^\d]/g, ''))
+          return !isNaN(num) && num >= 0 && num <= 300
+        })
+        .forEach(word => {
+          const wordY = word.bbox.y0
+          // Find existing row with similar Y position
+          let foundRow = false
+          for (const row of rows) {
+            if (row.length > 0) {
+              const rowY = row[0].bbox.y0
+              if (Math.abs(wordY - rowY) < yTolerance) {
+                row.push(word)
+                foundRow = true
+                break
+              }
+            }
+          }
+          if (!foundRow) {
+            rows.push([word])
+          }
+        })
+      
+      // Sort each row by X position (left to right)
+      rows.forEach(row => {
+        row.sort((a, b) => a.bbox.x0 - b.bbox.x0)
+      })
+      
+      // Sort rows by Y position (top to bottom)
+      rows.sort((a, b) => {
+        if (a.length === 0 || b.length === 0) return 0
+        return a[0].bbox.y0 - b[0].bbox.y0
+      })
+      
+      // Process each row as a potential bowler
+      rows.forEach(row => {
+        if (row.length >= 10) {
+          // Extract numbers from words
+          const numbers = row
+            .map(w => {
+              const num = parseInt(w.text.trim().replace(/[^\d]/g, ''))
+              return !isNaN(num) && num >= 0 && num <= 300 ? num : null
+            })
+            .filter(n => n !== null) as number[]
+          
+          if (numbers.length >= 10) {
+            // Take first 10 as frame scores, 11th as total if available
+            const frames = numbers.slice(0, 10)
+            const total = numbers[10] || null
+            
+            // Validate: frame scores should be cumulative (monotonically increasing)
+            // Or at least have reasonable values
+            const isCumulative = frames.every((f, i) => i === 0 || f >= frames[i - 1])
+            const hasValidRange = frames.every(f => f >= 0 && f <= 300)
+            const finalScoreReasonable = !total || (total >= frames[9] && total <= 300)
+            
+            if (hasValidRange && (isCumulative || finalScoreReasonable)) {
+              bowlers.push({
+                frameScores: frames,
+                totalScore: total,
+                confidence: isCumulative ? 0.9 : 0.7,
+              })
+            }
+          }
+        }
+      })
     }
-
-    // Try to identify bowler score sequences
-    // A complete game should have around 10-11 numbers (10 frames + total)
-    // Look for sequences of 10-12 numbers in a row
-    for (let i = 0; i < numbers.length - 9; i++) {
-      const sequence = numbers.slice(i, i + 11) // 10 frames + total
-      const frames = sequence.slice(0, 10)
-      const total = sequence[10] || null
-
-      // Validate: frame scores should generally increase and total should match sum pattern
-      if (frames.every(f => f >= 0 && f <= 300)) {
-        // Check if this looks like a valid score sequence
-        // Frame scores typically increase (cumulative) or are consistent ranges
-        const isValid = frames.some(f => f > 0) && (!total || (total >= frames[frames.length - 1] && total <= 300))
+    
+    // Strategy 2: Fallback to text-based parsing if positional data doesn't work
+    if (bowlers.length === 0) {
+      const lines = text.split('\n').filter(line => line.trim().length > 0)
+      
+      // Look for lines with multiple numbers (potential score rows)
+      lines.forEach(line => {
+        const numbers: number[] = []
+        const numberPattern = /\b(\d{1,3})\b/g
+        let match
         
-        if (isValid) {
-          bowlers.push({
-            frameScores: frames,
-            totalScore: total,
-            confidence: 0.7, // Base confidence
-          })
+        while ((match = numberPattern.exec(line)) !== null) {
+          const num = parseInt(match[1])
+          if (num >= 0 && num <= 300) {
+            numbers.push(num)
+          }
+        }
+        
+        // If we found 10+ numbers, it might be a bowler row
+        if (numbers.length >= 10) {
+          const frames = numbers.slice(0, 10)
+          const total = numbers[10] || null
+          
+          // Check if this looks like valid bowling scores
+          const isCumulative = frames.every((f, i) => i === 0 || f >= frames[i - 1])
+          const hasValidRange = frames.every(f => f >= 0 && f <= 300)
+          
+          if (hasValidRange) {
+            // Avoid duplicates
+            const isDuplicate = bowlers.some(b => 
+              b.frameScores.length === frames.length &&
+              b.frameScores.every((f, i) => f === frames[i])
+            )
+            
+            if (!isDuplicate) {
+              bowlers.push({
+                frameScores: frames,
+                totalScore: total,
+                confidence: isCumulative ? 0.8 : 0.6,
+              })
+            }
+          }
+        }
+      })
+    }
+    
+    // Strategy 3: Last resort - extract all numbers and group into potential sequences
+    if (bowlers.length === 0) {
+      const allNumbers: number[] = []
+      const numberPattern = /\b(\d{1,3})\b/g
+      let match
+      
+      while ((match = numberPattern.exec(text)) !== null) {
+        const num = parseInt(match[1])
+        if (num >= 0 && num <= 300) {
+          allNumbers.push(num)
+        }
+      }
+      
+      // Try to find sequences of 10 numbers
+      for (let i = 0; i <= allNumbers.length - 10; i++) {
+        const sequence = allNumbers.slice(i, i + 11) // 10 frames + possible total
+        const frames = sequence.slice(0, 10)
+        const total = sequence[10] || null
+        
+        // Check if sequence looks valid
+        const isCumulative = frames.every((f, i) => i === 0 || f >= frames[i - 1])
+        const hasValidRange = frames.every(f => f >= 0 && f <= 300)
+        const finalScoreReasonable = !total || (total >= frames[9] && total <= 300)
+        
+        if (hasValidRange && (isCumulative || finalScoreReasonable)) {
+          // Avoid duplicates
+          const isDuplicate = bowlers.some(b => 
+            b.frameScores.length === frames.length &&
+            b.frameScores.every((f, i) => f === frames[i])
+          )
+          
+          if (!isDuplicate) {
+            bowlers.push({
+              frameScores: frames,
+              totalScore: total,
+              confidence: isCumulative ? 0.7 : 0.5,
+            })
+          }
         }
       }
     }
 
-    // If we didn't find good sequences, try finding individual frame-like numbers
-    if (bowlers.length === 0) {
-      // Look for potential frame scores (usually 2-3 digit numbers)
-      const potentialFrames = numbers.filter(n => n >= 10 && n <= 300)
-      if (potentialFrames.length >= 10) {
-        // Take first 10 as frames, next as total
-        bowlers.push({
-          frameScores: potentialFrames.slice(0, 10),
-          totalScore: potentialFrames[10] || null,
-          confidence: 0.5,
-        })
-      }
-    }
-
-    return bowlers.length > 0 ? bowlers : [{
-      frameScores: numbers.slice(0, 10).map(n => n || null),
-      totalScore: numbers[10] || null,
-      confidence: 0.3,
-    }]
+    return bowlers.length > 0 ? bowlers : []
   }
 
   const extractFramesFromBowler = (bowler: DetectedBowler) => {
-    // Convert detected frame scores to Frame objects
-    // Since OCR gives us cumulative scores, we need to convert to individual frame scores
+    // Convert detected cumulative frame scores to Frame objects
+    // OCR typically gives us cumulative scores: [frame1_total, frame2_total, ..., frame10_total]
+    // We store the cumulative score, and calculate individual frame contributions where possible
     const frames: Frame[] = Array(10).fill(null).map(() => ({
       firstRoll: null,
       secondRoll: null,
@@ -205,18 +311,52 @@ export default function OCRPage() {
       frameScore: null,
     }))
 
-    // Try to extract individual rolls from the frame scores
-    // This is a simplified version - full implementation would parse the OCR text more carefully
+    // Store cumulative scores
     for (let i = 0; i < 10; i++) {
       if (bowler.frameScores[i] !== null) {
-        frames[i].score = bowler.frameScores[i] as number
-        // We'll need to infer frame data from cumulative scores
-        // For now, set a placeholder
-        frames[i].firstRoll = 0 // Placeholder - would need more sophisticated parsing
-        frames[i].secondRoll = 0
+        const cumulativeScore = bowler.frameScores[i] as number
+        const previousScore = i > 0 && bowler.frameScores[i - 1] !== null 
+          ? bowler.frameScores[i - 1] as number 
+          : 0
+        
+        // Calculate this frame's contribution (points added this frame)
+        const framePoints = cumulativeScore - previousScore
+        
+        // Store cumulative score
+        frames[i].score = cumulativeScore
+        frames[i].frameScore = framePoints
+        
+        // Try to infer frame type and rolls based on points added
+        // Note: This is an approximation - we can't know exact rolls from cumulative alone
+        if (framePoints >= 30) {
+          // Perfect frame - strike with two strikes following
+          frames[i].firstRoll = 10
+          frames[i].isStrike = true
+        } else if (framePoints >= 20 && framePoints < 30) {
+          // Strike with bonus (20-29 points)
+          frames[i].firstRoll = 10
+          frames[i].isStrike = true
+        } else if (framePoints === 10 && i < 9) {
+          // Could be spare or open frame - default to spare
+          frames[i].firstRoll = 5 // Estimate
+          frames[i].secondRoll = 5
+          frames[i].isSpare = true
+        } else if (framePoints < 10) {
+          // Open frame
+          frames[i].firstRoll = Math.max(0, Math.floor(framePoints / 2))
+          frames[i].secondRoll = Math.max(0, framePoints - (frames[i].firstRoll || 0))
+          frames[i].isOpen = true
+        } else {
+          // Edge case - set as open frame
+          frames[i].firstRoll = Math.max(0, Math.floor(framePoints / 2))
+          frames[i].secondRoll = Math.max(0, framePoints - (frames[i].firstRoll || 0))
+          frames[i].isOpen = true
+        }
       }
     }
 
+    // The main thing we preserve is the cumulative scores
+    // Individual roll data is approximate, but cumulative scores are accurate
     setExtractedFrames(frames)
   }
 
