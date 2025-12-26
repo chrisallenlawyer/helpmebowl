@@ -669,52 +669,84 @@ export default function OCRPage() {
       frameScore: null,
     }))
 
-    // Store cumulative scores
-    for (let i = 0; i < 10; i++) {
-      if (bowler.frameScores[i] !== null) {
-        const cumulativeScore = bowler.frameScores[i] as number
-        const previousScore = i > 0 && bowler.frameScores[i - 1] !== null 
-          ? bowler.frameScores[i - 1] as number 
-          : 0
+    // If we have individual ball data from OCR, use it directly (more accurate)
+    if (bowler.individualBalls && bowler.individualBalls.length > 0) {
+      for (let i = 0; i < 10 && i < bowler.individualBalls.length; i++) {
+        const ball = bowler.individualBalls[i]
+        const cumulativeScore = bowler.frameScores[i] !== null ? bowler.frameScores[i] as number : null
         
-        // Calculate this frame's contribution (points added this frame)
-        const framePoints = cumulativeScore - previousScore
-        
-        // Store cumulative score
-        frames[i].score = cumulativeScore
-        frames[i].frameScore = framePoints
-        
-        // Try to infer frame type and rolls based on points added
-        // Note: This is an approximation - we can't know exact rolls from cumulative alone
-        if (framePoints >= 30) {
-          // Perfect frame - strike with two strikes following
+        if (ball.first === 'X') {
           frames[i].firstRoll = 10
           frames[i].isStrike = true
-        } else if (framePoints >= 20 && framePoints < 30) {
-          // Strike with bonus (20-29 points)
-          frames[i].firstRoll = 10
-          frames[i].isStrike = true
-        } else if (framePoints === 10 && i < 9) {
-          // Could be spare or open frame - default to spare
-          frames[i].firstRoll = 5 // Estimate
-          frames[i].secondRoll = 5
-          frames[i].isSpare = true
-        } else if (framePoints < 10) {
-          // Open frame
-          frames[i].firstRoll = Math.max(0, Math.floor(framePoints / 2))
-          frames[i].secondRoll = Math.max(0, framePoints - (frames[i].firstRoll || 0))
-          frames[i].isOpen = true
-        } else {
-          // Edge case - set as open frame
-          frames[i].firstRoll = Math.max(0, Math.floor(framePoints / 2))
-          frames[i].secondRoll = Math.max(0, framePoints - (frames[i].firstRoll || 0))
-          frames[i].isOpen = true
+        } else if (ball.first !== null) {
+          frames[i].firstRoll = ball.first as number
+          
+          if (ball.second === '/') {
+            frames[i].secondRoll = 10 - (ball.first as number)
+            frames[i].isSpare = true
+          } else if (ball.second !== null) {
+            frames[i].secondRoll = ball.second as number
+            if ((ball.first as number) + (ball.second as number) < 10) {
+              frames[i].isOpen = true
+            }
+          }
+        }
+        
+        // Store cumulative score if available
+        if (cumulativeScore !== null) {
+          frames[i].score = cumulativeScore
+          const previousScore = i > 0 && bowler.frameScores[i - 1] !== null 
+            ? bowler.frameScores[i - 1] as number 
+            : 0
+          frames[i].frameScore = cumulativeScore - previousScore
+        }
+      }
+    } else {
+      // Fallback: Infer from cumulative scores (less accurate)
+      for (let i = 0; i < 10; i++) {
+        if (bowler.frameScores[i] !== null) {
+          const cumulativeScore = bowler.frameScores[i] as number
+          const previousScore = i > 0 && bowler.frameScores[i - 1] !== null 
+            ? bowler.frameScores[i - 1] as number 
+            : 0
+          
+          // Calculate this frame's contribution (points added this frame)
+          const framePoints = cumulativeScore - previousScore
+          
+          // Store cumulative score
+          frames[i].score = cumulativeScore
+          frames[i].frameScore = framePoints
+          
+          // Try to infer frame type and rolls based on points added
+          // Note: This is an approximation - we can't know exact rolls from cumulative alone
+          if (framePoints >= 30) {
+            // Perfect frame - strike with two strikes following
+            frames[i].firstRoll = 10
+            frames[i].isStrike = true
+          } else if (framePoints >= 20 && framePoints < 30) {
+            // Strike with bonus (20-29 points)
+            frames[i].firstRoll = 10
+            frames[i].isStrike = true
+          } else if (framePoints === 10 && i < 9) {
+            // Could be spare or open frame - default to spare
+            frames[i].firstRoll = 5 // Estimate
+            frames[i].secondRoll = 5
+            frames[i].isSpare = true
+          } else if (framePoints < 10) {
+            // Open frame
+            frames[i].firstRoll = Math.max(0, Math.floor(framePoints / 2))
+            frames[i].secondRoll = Math.max(0, framePoints - (frames[i].firstRoll || 0))
+            frames[i].isOpen = true
+          } else {
+            // Edge case - set as open frame
+            frames[i].firstRoll = Math.max(0, Math.floor(framePoints / 2))
+            frames[i].secondRoll = Math.max(0, framePoints - (frames[i].firstRoll || 0))
+            frames[i].isOpen = true
+          }
         }
       }
     }
-
-    // The main thing we preserve is the cumulative scores
-    // Individual roll data is approximate, but cumulative scores are accurate
+    
     setExtractedFrames(frames)
   }
 
