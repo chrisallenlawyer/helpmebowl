@@ -140,7 +140,21 @@ export default function OCRPage() {
   const parseBowlingScores = (text: string, words: any[]): DetectedBowler[] => {
     const bowlers: DetectedBowler[] = []
     
-    // Strategy: Look for rows with 10-12 numbers in sequence (frames + total)
+    // Strategy 1: Extract ALL numbers from text first (works even with messy OCR)
+    const allNumbers: number[] = []
+    const numberPattern = /(\d{1,3})/g
+    let match
+    
+    while ((match = numberPattern.exec(text)) !== null) {
+      const num = parseInt(match[1])
+      if (!isNaN(num) && num >= 0 && num <= 300) {
+        allNumbers.push(num)
+      }
+    }
+    
+    console.log('Extracted numbers from text:', allNumbers)
+    
+    // Strategy 2: Look for rows with 10-12 numbers in sequence (frames + total)
     // Prefer rows that start with text (names), but don't require it
     
     if (words && words.length > 0) {
@@ -267,12 +281,11 @@ export default function OCRPage() {
         const candidateFrames = allNumbers.slice(start, start + 10)
         const candidateTotal = start + 10 < allNumbers.length ? allNumbers[start + 10] : null
         
-        // Very lenient validation - just check range
+        // Ultra lenient validation - just check range (0-300)
+        // Accept any sequence - user can edit if wrong
         const hasValidRange = candidateFrames.every(f => f >= 0 && f <= 300)
-        const hasSomeProgression = candidateFrames.some((f, i) => i === 0 || f > candidateFrames[i - 1] || f === candidateFrames[i - 1])
-        const reasonableFinal = !candidateTotal || (candidateTotal >= candidateFrames[0] && candidateTotal <= 300)
         
-        if (hasValidRange && (hasSomeProgression || reasonableFinal)) {
+        if (hasValidRange) {
           // Check if cumulative (higher confidence)
           const isCumulative = candidateFrames.every((f, i) => i === 0 || f >= candidateFrames[i - 1])
           
