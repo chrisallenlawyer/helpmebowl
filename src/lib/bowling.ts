@@ -34,7 +34,7 @@ export function calculateMaxScore(gameState: GameState, currentFrame: number): n
     if (frame10.score !== null) {
       // Frame 10 is complete
       return frame10.score
-    } else if (frame10.isStrike && frame10.secondRoll !== null && frame10.thirdRoll !== null) {
+    } else if (frame10.isStrike && frame10.secondRoll !== null && frame10.thirdRoll !== null && frame10.thirdRoll !== undefined) {
       // Frame 10 strike complete
       return baseScore + 10 + frame10.secondRoll + frame10.thirdRoll
     } else if (frame10.isStrike && frame10.secondRoll !== null) {
@@ -43,7 +43,7 @@ export function calculateMaxScore(gameState: GameState, currentFrame: number): n
     } else if (frame10.isStrike) {
       // Just strike, assume max on both bonuses (strike + strike = 20)
       return baseScore + 30
-    } else if (frame10.isSpare && frame10.thirdRoll !== null) {
+    } else if (frame10.isSpare && frame10.thirdRoll !== null && frame10.thirdRoll !== undefined) {
       // Frame 10 spare complete
       return baseScore + 10 + frame10.thirdRoll
     } else if (frame10.isSpare) {
@@ -105,9 +105,9 @@ export function calculateFrameScore(
     if (frame.firstRoll !== null && frame.secondRoll !== null && frame.thirdRoll !== null) {
       // Frame 10 complete
       if (frame.isStrike) {
-        framePoints = 10 + (frame.secondRoll || 0) + (frame.thirdRoll || 0)
+        framePoints = 10 + (frame.secondRoll || 0) + (frame.thirdRoll ?? 0)
       } else if (frame.isSpare) {
-        framePoints = 10 + (frame.thirdRoll || 0)
+        framePoints = 10 + (frame.thirdRoll ?? 0)
       } else {
         framePoints = (frame.firstRoll || 0) + (frame.secondRoll || 0)
       }
@@ -342,9 +342,9 @@ export function getGameStateFromFrames(frames: Frame[]): GameState {
         if (i === 9) {
           // Frame 10 scoring
           if (frame.isStrike) {
-            frameScore = 10 + (frame.secondRoll || 0) + (frame.thirdRoll || 0)
+            frameScore = 10 + (frame.secondRoll || 0) + (frame.thirdRoll ?? 0)
           } else if (frame.isSpare) {
-            frameScore = 10 + (frame.thirdRoll || 0)
+            frameScore = 10 + (frame.thirdRoll ?? 0)
           } else {
             frameScore = (frame.firstRoll || 0) + (frame.secondRoll || 0)
           }
