@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { createWorker } from 'tesseract.js'
+// Tesseract.js will be imported dynamically as fallback
 import { getGameStateFromFrames, calculateMaxScore, validateRoll, type Frame, type GameState } from '@/lib/bowling'
 
 export const dynamic = 'force-dynamic'
