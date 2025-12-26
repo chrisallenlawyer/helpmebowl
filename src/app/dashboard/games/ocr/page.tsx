@@ -577,7 +577,8 @@ export default function OCRPage() {
             }
           }
         }
-      })
+        })
+      }
       
       // Sort by confidence, prefer cumulative sequences and named bowlers
       bowlers.sort((a, b) => {
