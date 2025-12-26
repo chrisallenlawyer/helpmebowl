@@ -12,7 +12,7 @@ interface Game {
   id: string
   score: number
   date: string
-  frame_scores: Frame[] | null
+  frame_scores: any // Can be Frame[] or JSON format from database
 }
 
 export default function AnalyticsPage() {
@@ -100,8 +100,26 @@ export default function AnalyticsPage() {
 
   filteredGames.forEach(game => {
     if (game.frame_scores && Array.isArray(game.frame_scores)) {
-      totalStrikes += calculateStrikes(game.frame_scores)
-      totalSpares += calculateSpares(game.frame_scores)
+      // Convert database frame_scores format to Frame[] if needed
+      const frames: Frame[] = game.frame_scores.map((fs: any) => {
+        // If it's already in Frame format (has isStrike, isSpare properties)
+        if (fs.isStrike !== undefined || fs.isSpare !== undefined) {
+          return fs as Frame
+        }
+        // Otherwise, convert from database format {first, second, third, score}
+        return {
+          firstRoll: fs.first ?? null,
+          secondRoll: fs.second ?? null,
+          thirdRoll: fs.third ?? null,
+          isStrike: fs.first === 10,
+          isSpare: fs.first !== null && fs.second !== null && fs.first !== 10 && fs.first + fs.second === 10,
+          isOpen: fs.first !== null && fs.second !== null && fs.first !== 10 && fs.first + fs.second < 10,
+          score: fs.score ?? null,
+          frameScore: null,
+        } as Frame
+      })
+      totalStrikes += calculateStrikes(frames)
+      totalSpares += calculateSpares(frames)
     }
   })
 
