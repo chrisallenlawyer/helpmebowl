@@ -28,6 +28,10 @@ export default function OCRPage() {
   const [detectedBowlers, setDetectedBowlers] = useState<DetectedBowler[]>([])
   const [selectedBowlerIndex, setSelectedBowlerIndex] = useState<number | null>(null)
   const [extractedFrames, setExtractedFrames] = useState<Frame[] | null>(null)
+  const [detectedNumbers, setDetectedNumbers] = useState<number[]>([])
+  const [showManualEntry, setShowManualEntry] = useState(false)
+  const [manualFrameScores, setManualFrameScores] = useState<(number | null)[]>([null, null, null, null, null, null, null, null, null, null])
+  const [manualTotal, setManualTotal] = useState<number | null>(null)
   const [editingFrames, setEditingFrames] = useState(false)
   const [gameState, setGameState] = useState<GameState | null>(null)
   const [currentFrame, setCurrentFrame] = useState(0)
@@ -111,24 +115,36 @@ export default function OCRPage() {
       const { data } = await worker.recognize(imageFile)
       await worker.terminate()
 
-      // Debug: Log detected text (can be removed in production)
+      // Extract all numbers from OCR text for manual mapping
+      const allNumbers: number[] = []
+      const numberPattern = /(\d{1,3})/g
+      let match
+      
+      while ((match = numberPattern.exec(data.text)) !== null) {
+        const num = parseInt(match[1])
+        if (!isNaN(num) && num >= 0 && num <= 300) {
+          allNumbers.push(num)
+        }
+      }
+      
+      console.log('Detected numbers:', allNumbers)
       console.log('OCR Text:', data.text)
-      console.log('OCR Words count:', data.words?.length || 0)
-
-      // Parse the OCR data to find bowling scores using both text and structure
+      
+      // Store raw OCR data for manual entry
+      setDetectedNumbers(allNumbers)
+      
+      // Try automatic parsing, but don't require it
       const bowlers = parseBowlingScores(data.text, data.words || [])
       
-      console.log('Detected bowlers:', bowlers.length, bowlers)
-      
-      if (bowlers.length === 0) {
-        setError('No bowling scores detected in the image. Please try again with a clearer photo.')
-      } else {
+      if (bowlers.length > 0) {
         setDetectedBowlers(bowlers)
-        // Auto-select if only one bowler
         if (bowlers.length === 1) {
           setSelectedBowlerIndex(0)
           extractFramesFromBowler(bowlers[0])
         }
+      } else {
+        // No automatic detection - show manual entry interface
+        setShowManualEntry(true)
       }
     } catch (err: any) {
       setError(`OCR processing failed: ${err.message}`)
@@ -615,14 +631,14 @@ export default function OCRPage() {
   }
 
   const handleSave = async () => {
-    if (selectedBowlerIndex === null || !extractedFrames) {
-      setError('Please select a bowler first')
+    if (selectedBowlerIndex === null || !extractedFrames || !gameState) {
+      setError('Please complete the score entry first')
       return
     }
 
-    const bowler = detectedBowlers[selectedBowlerIndex!]
-    if (!bowler.totalScore || bowler.totalScore === 0) {
-      setError('Invalid score detected. Please verify the score.')
+    const finalScore = gameState[9]?.score || detectedBowlers[selectedBowlerIndex!]?.totalScore
+    if (!finalScore || finalScore === 0) {
+      setError('Invalid score. Please verify the score.')
       return
     }
 
@@ -678,7 +694,7 @@ export default function OCRPage() {
         notes: formData.notes || null,
         score_source: 'ocr',
         score_photo_url: photoUrl,
-        ocr_confidence: bowler.confidence,
+        ocr_confidence: detectedBowlers[selectedBowlerIndex!]?.confidence || 0.5,
         frame_scores: finalGameState ? finalGameState.map(f => ({
           first: f.firstRoll,
           second: f.secondRoll,
@@ -771,6 +787,10 @@ export default function OCRPage() {
                 setDetectedBowlers([])
                 setSelectedBowlerIndex(null)
                 setExtractedFrames(null)
+                setDetectedNumbers([])
+                setShowManualEntry(false)
+                setManualFrameScores([null, null, null, null, null, null, null, null, null, null])
+                setManualTotal(null)
               }}
               className="w-full bg-gray-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-gray-700"
             >
@@ -787,8 +807,84 @@ export default function OCRPage() {
         </div>
       )}
 
+      {/* Manual Entry Option */}
+      {(showManualEntry || detectedBowlers.length === 0) && !processing && imagePreview && (
+        <div className="bg-white shadow rounded-lg p-6 mb-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">
+            Manual Score Entry
+          </h2>
+          <p className="text-sm text-gray-600 mb-4">
+            {detectedNumbers.length > 0 
+              ? `OCR detected these numbers: ${detectedNumbers.slice(0, 20).join(', ')}${detectedNumbers.length > 20 ? '...' : ''}. Please enter the frame scores (cumulative) from the image.`
+              : 'Enter the frame scores (cumulative) from the image.'}
+          </p>
+          
+          <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-3 mb-4">
+            {manualFrameScores.map((score, index) => (
+              <div key={index} className="space-y-1">
+                <label className="block text-xs text-gray-600">Frame {index + 1}</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="300"
+                  value={score ?? ''}
+                  onChange={(e) => {
+                    const value = e.target.value === '' ? null : parseInt(e.target.value)
+                    setManualFrameScores(prev => {
+                      const newScores = [...prev]
+                      newScores[index] = value
+                      return newScores
+                    })
+                  }}
+                  placeholder="-"
+                  className="w-full px-2 py-2 border border-gray-300 rounded text-black text-center font-semibold focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                />
+              </div>
+            ))}
+          </div>
+          
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Total Score (Optional)
+            </label>
+            <input
+              type="number"
+              min="0"
+              max="300"
+              value={manualTotal ?? ''}
+              onChange={(e) => setManualTotal(e.target.value === '' ? null : parseInt(e.target.value))}
+              placeholder="Enter total"
+              className="w-full px-3 py-2 border border-gray-300 rounded text-black focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+            />
+          </div>
+          
+          <button
+            onClick={() => {
+              // Convert manual entry to bowler format
+              const frames = manualFrameScores.filter(s => s !== null) as number[]
+              if (frames.length >= 10) {
+                const bowler: DetectedBowler = {
+                  frameScores: frames.slice(0, 10),
+                  totalScore: manualTotal,
+                  confidence: 1.0,
+                }
+                setDetectedBowlers([bowler])
+                setSelectedBowlerIndex(0)
+                extractFramesFromBowler(bowler)
+                setShowManualEntry(false)
+              } else {
+                setError('Please enter at least 10 frame scores')
+              }
+            }}
+            className="w-full bg-indigo-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-indigo-700"
+          >
+            Use These Scores
+          </button>
+        </div>
+      )}
+
       {/* Bowler Selection */}
-      {detectedBowlers.length > 0 && (
+      {detectedBowlers.length > 0 && !showManualEntry && (
         <div className="bg-white shadow rounded-lg p-6 mb-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">
             Select Your Score ({detectedBowlers.length} {detectedBowlers.length === 1 ? 'bowler' : 'bowlers'} detected)
