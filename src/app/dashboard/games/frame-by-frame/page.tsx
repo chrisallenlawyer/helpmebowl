@@ -117,18 +117,32 @@ export default function FrameByFramePage() {
         }
       } else if (rollNumber === 2) {
         if (frame.firstRoll === null) return prevFrames
-        if (numValue !== null && !validateRoll(numValue, frameIndex, 2, frame.firstRoll)) {
-          return prevFrames
-        }
-        frame.secondRoll = numValue
-        // If frame 10 and not a strike/spare yet, no third roll
-        if (frameIndex === 9 && frame.firstRoll !== null && numValue !== null && frame.firstRoll + numValue < 10) {
-          frame.thirdRoll = null
+        // Special handling for frame 10: if first ball is strike, second ball can be 0-10 (bonus ball)
+        if (frameIndex === 9 && frame.firstRoll === 10) {
+          // Ball 2 is a bonus ball, can be 0-10
+          if (numValue !== null && (numValue < 0 || numValue > 10)) {
+            return prevFrames
+          }
+          frame.secondRoll = numValue
+        } else {
+          // Normal validation for frames 1-9 or frame 10 without strike
+          if (numValue !== null && !validateRoll(numValue, frameIndex, 2, frame.firstRoll)) {
+            return prevFrames
+          }
+          frame.secondRoll = numValue
+          // If frame 10 and not a strike/spare yet, no third roll
+          if (frameIndex === 9 && frame.firstRoll !== null && numValue !== null && frame.firstRoll + numValue < 10) {
+            frame.thirdRoll = null
+          }
         }
       } else if (rollNumber === 3) {
         // Only frame 10 can have a third roll
         if (frameIndex !== 9) return prevFrames
         if (frame.secondRoll === null) return prevFrames
+        // Ball 3 is always a bonus ball in frame 10, can be 0-10
+        if (numValue !== null && (numValue < 0 || numValue > 10)) {
+          return prevFrames
+        }
         frame.thirdRoll = numValue
       }
 
@@ -297,29 +311,48 @@ export default function FrameByFramePage() {
                         <option value="X">X</option>
                       </select>
                     </div>
-                    {frame.firstRoll !== null && frame.firstRoll < 10 && (
+                    {frame.firstRoll !== null && (
                       <div className="space-y-1">
                         <label className="text-xs text-gray-500 font-medium">Ball 2</label>
-                        <select
-                          value={getBall2Value(frame)}
-                          onChange={(e) => handleRollChange(frameIndex, 2, e.target.value)}
-                          className="w-full text-center text-black font-bold text-base sm:text-lg px-2 py-1.5 sm:py-2 border border-gray-300 rounded bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                        >
-                          <option value="">-</option>
-                          {[...Array(11 - frame.firstRoll)].map((_, i) => (
-                            <option key={i} value={i}>
-                              {i}
-                            </option>
-                          ))}
-                          <option value="/">/</option>
-                        </select>
+                        {frame.firstRoll === 10 ? (
+                          // Strike on first ball - Ball 2 can be 0-10 or X
+                          <select
+                            value={frame.secondRoll === null ? '' : frame.secondRoll === 10 ? 'X' : frame.secondRoll.toString()}
+                            onChange={(e) => handleRollChange(frameIndex, 2, e.target.value)}
+                            className="w-full text-center text-black font-bold text-base sm:text-lg px-2 py-1.5 sm:py-2 border border-gray-300 rounded bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                          >
+                            <option value="">-</option>
+                            {[...Array(11)].map((_, i) => (
+                              <option key={i} value={i}>
+                                {i}
+                              </option>
+                            ))}
+                            <option value="X">X</option>
+                          </select>
+                        ) : (
+                          // Not a strike - Ball 2 can be 0 to remaining pins or /
+                          <select
+                            value={getBall2Value(frame)}
+                            onChange={(e) => handleRollChange(frameIndex, 2, e.target.value)}
+                            className="w-full text-center text-black font-bold text-base sm:text-lg px-2 py-1.5 sm:py-2 border border-gray-300 rounded bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                          >
+                            <option value="">-</option>
+                            {[...Array(11 - frame.firstRoll)].map((_, i) => (
+                              <option key={i} value={i}>
+                                {i}
+                              </option>
+                            ))}
+                            <option value="/">/</option>
+                          </select>
+                        )}
                       </div>
                     )}
-                    {(frame.isStrike || frame.isSpare) && (
+                    {/* Ball 3 shows when: strike on ball 1 (need 2 bonus balls) OR spare on balls 1+2 (need 1 bonus ball) */}
+                    {frame.firstRoll === 10 || (frame.firstRoll !== null && frame.secondRoll !== null && frame.firstRoll + frame.secondRoll === 10) ? (
                       <div className="space-y-1">
                         <label className="text-xs text-gray-500 font-medium">Ball 3</label>
                         <select
-                          value={frame.thirdRoll ?? ''}
+                          value={frame.thirdRoll === null ? '' : frame.thirdRoll === 10 ? 'X' : frame.thirdRoll.toString()}
                           onChange={(e) => handleRollChange(frameIndex, 3, e.target.value)}
                           disabled={frame.secondRoll === null}
                           className="w-full text-center text-black font-bold text-base sm:text-lg px-2 py-1.5 sm:py-2 border border-gray-300 rounded bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
@@ -333,7 +366,7 @@ export default function FrameByFramePage() {
                           <option value="X">X</option>
                         </select>
                       </div>
-                    )}
+                    ) : null}
                   </div>
                 ) : (
                   <div className="space-y-2">
