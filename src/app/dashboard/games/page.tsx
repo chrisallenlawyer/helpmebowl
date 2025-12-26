@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { format } from 'date-fns'
+import GameListItem from './GameListItem'
 
 export const dynamic = 'force-dynamic'
 
@@ -66,53 +66,7 @@ export default async function GamesPage() {
         <div className="bg-white shadow overflow-hidden sm:rounded-md">
           <ul className="divide-y divide-gray-200">
             {games?.map((game) => (
-              <li key={game.id}>
-                <Link
-                  href={`/dashboard/games/${game.id}`}
-                  className="block hover:bg-gray-50"
-                >
-                  <div className="px-4 py-4 sm:px-6">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center">
-                        <p className="text-2xl font-bold text-gray-900">
-                          {game.score}
-                        </p>
-                        <div className="ml-4">
-                          <p className="text-sm font-medium text-gray-900">
-                            {game.location_name || 'No location'}
-                          </p>
-                          <p className="text-sm text-gray-500">
-                            {format(new Date(game.date), 'MMMM d, yyyy')}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                          {game.score_source === 'ocr' ? '📸 Photo' : '✍️ Manual'}
-                        </span>
-                        <svg
-                          className="ml-4 h-5 w-5 text-gray-400"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M9 5l7 7-7 7"
-                          />
-                        </svg>
-                      </div>
-                    </div>
-                    {game.notes && (
-                      <div className="mt-2">
-                        <p className="text-sm text-gray-600">{game.notes}</p>
-                      </div>
-                    )}
-                  </div>
-                </Link>
-              </li>
+              <GameListItem key={game.id} game={game} />
             ))}
           </ul>
         </div>

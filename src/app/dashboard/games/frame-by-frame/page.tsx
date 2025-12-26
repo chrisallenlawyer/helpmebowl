@@ -35,6 +35,12 @@ export default function FrameByFramePage() {
   const [maxScore, setMaxScore] = useState(300)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [formData, setFormData] = useState({
+    date: new Date().toISOString().split('T')[0],
+    location_name: '',
+    location_address: '',
+    notes: '',
+  })
 
   useEffect(() => {
     const newGameState = getGameStateFromFrames(frames)
@@ -205,7 +211,10 @@ export default function FrameByFramePage() {
       const { error } = await supabase.from('games').insert({
         user_id: user.id,
         score: finalScore,
-        date: new Date().toISOString(),
+        date: formData.date,
+        location_name: formData.location_name || null,
+        location_address: formData.location_address || null,
+        notes: formData.notes || null,
         score_source: 'manual',
         frame_scores: gameState.map(f => ({
           first: f.firstRoll,
@@ -427,6 +436,65 @@ export default function FrameByFramePage() {
               </div>
             )
           })}
+        </div>
+      </div>
+
+      {/* Game Details Form */}
+      <div className="bg-white shadow rounded-lg p-4 sm:p-6 mb-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">Game Details</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-1">
+              Date *
+            </label>
+            <input
+              type="date"
+              id="date"
+              required
+              value={formData.date}
+              onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-black"
+            />
+          </div>
+          <div>
+            <label htmlFor="location_name" className="block text-sm font-medium text-gray-700 mb-1">
+              Location Name
+            </label>
+            <input
+              type="text"
+              id="location_name"
+              value={formData.location_name}
+              onChange={(e) => setFormData({ ...formData, location_name: e.target.value })}
+              placeholder="e.g., AMF Lanes"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-black"
+            />
+          </div>
+          <div className="md:col-span-2">
+            <label htmlFor="location_address" className="block text-sm font-medium text-gray-700 mb-1">
+              Location Address
+            </label>
+            <input
+              type="text"
+              id="location_address"
+              value={formData.location_address}
+              onChange={(e) => setFormData({ ...formData, location_address: e.target.value })}
+              placeholder="e.g., 123 Main St, City, State"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-black"
+            />
+          </div>
+          <div className="md:col-span-2">
+            <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-1">
+              Notes
+            </label>
+            <textarea
+              id="notes"
+              rows={3}
+              value={formData.notes}
+              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+              placeholder="Add any additional notes about this game..."
+              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-black"
+            />
+          </div>
         </div>
       </div>
 
