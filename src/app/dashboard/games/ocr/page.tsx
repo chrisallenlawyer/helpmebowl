@@ -708,6 +708,23 @@ export default function OCRPage() {
       console.log('After inferRollsFromCumulative, frames:', frames.map(f => ({ first: f.firstRoll, second: f.secondRoll, third: f.thirdRoll })))
     }
     
+    // After inference, recalculate scores using getGameStateFromFrames to ensure consistency
+    // This will validate that the inferred rolls actually produce the correct cumulative scores
+    const validatedGameState = getGameStateFromFrames(frames)
+    
+    // Update frames with validated scores (but keep the inferred rolls)
+    for (let i = 0; i < 10; i++) {
+      if (validatedGameState[i].score !== null) {
+        // Use the validated score, but keep our inferred rolls
+        frames[i].score = validatedGameState[i].score
+        frames[i].frameScore = validatedGameState[i].frameScore
+        // Update frame type flags from validated state
+        frames[i].isStrike = validatedGameState[i].isStrike
+        frames[i].isSpare = validatedGameState[i].isSpare
+        frames[i].isOpen = validatedGameState[i].isOpen
+      }
+    }
+    
     console.log('Final frames before setExtractedFrames:', frames.map((f, i) => ({
       frame: i + 1,
       firstRoll: f.firstRoll,
