@@ -107,41 +107,84 @@ export default function OCRPage() {
     setDetectedBowlers([])
     setSelectedBowlerIndex(null)
     setExtractedFrames(null)
+    setDetectedText(null)
 
     try {
-      const worker = await createWorker('eng')
-      
-      // Perform OCR with detailed output including word positions
-      const { data } = await worker.recognize(imageFile)
-      await worker.terminate()
+      let ocrText = ''
+      let ocrWords: any[] = []
+      let allNumbers: number[] = []
 
-      // Extract all numbers from OCR text - use as reference for manual entry
-      const allNumbers: number[] = []
-      const numberPattern = /(\d{1,3})/g
-      let match
-      
-      while ((match = numberPattern.exec(data.text)) !== null) {
-        const num = parseInt(match[1])
-        if (!isNaN(num) && num >= 0 && num <= 300) {
-          allNumbers.push(num)
+      // Try Google Vision API first (server-side, more accurate)
+      try {
+        const formData = new FormData()
+        
+        // Convert image to File if it's a string (data URL)
+        if (typeof imageFile === 'string') {
+          const response = await fetch(imageFile)
+          const blob = await response.blob()
+          formData.append('image', blob, 'image.jpg')
+        } else {
+          formData.append('image', imageFile)
+        }
+
+        const ocrResponse = await fetch('/api/ocr', {
+          method: 'POST',
+          body: formData,
+        })
+
+        if (ocrResponse.ok) {
+          const ocrData = await ocrResponse.json()
+          ocrText = ocrData.text || ''
+          ocrWords = ocrData.words || []
+          allNumbers = ocrData.allNumbers || []
+          console.log('Google Vision OCR successful')
+        } else {
+          const errorData = await ocrResponse.json()
+          if (errorData.requiresSetup) {
+            console.log('Google Vision not configured, falling back to Tesseract')
+            throw new Error('Google Vision not configured')
+          } else {
+            throw new Error(errorData.error || 'OCR API failed')
+          }
+        }
+      } catch (apiError: any) {
+        // Fallback to Tesseract.js if Google Vision is not available
+        console.log('Falling back to Tesseract.js:', apiError.message)
+        const tesseract = await import('tesseract.js')
+        const worker = await tesseract.createWorker('eng')
+        const { data } = await worker.recognize(imageFile as string)
+        await worker.terminate()
+        
+        ocrText = data.text || ''
+        ocrWords = data.words || []
+        
+        // Extract numbers
+        const numberPattern = /(\d{1,3})/g
+        let match
+        while ((match = numberPattern.exec(ocrText)) !== null) {
+          const num = parseInt(match[1])
+          if (!isNaN(num) && num >= 0 && num <= 300) {
+            allNumbers.push(num)
+          }
         }
       }
       
       console.log('OCR detected numbers:', allNumbers)
-      console.log('Full OCR text:', data.text)
+      console.log('Full OCR text:', ocrText)
+      setDetectedText(ocrText)
       
       // Always show manual entry - use OCR numbers as reference only
       setDetectedNumbers(allNumbers)
       setShowManualEntry(true)
       
       // Optionally try automatic parsing as a helper (non-blocking)
-      const bowlers = parseBowlingScores(data.text, data.words || [])
+      const bowlers = parseBowlingScores(ocrText, ocrWords)
       if (bowlers.length > 0) {
         setDetectedBowlers(bowlers)
         console.log('Auto-detected bowlers (optional):', bowlers)
       }
     } catch (err: any) {
-      setError(`OCR processing failed: ${err.message}`)
+      setError(`OCR processing failed: ${err.message}. Please try manual entry.`)
     } finally {
       setProcessing(false)
     }
