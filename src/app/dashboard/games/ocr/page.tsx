@@ -642,7 +642,16 @@ export default function OCRPage() {
       console.log('After inferRollsFromCumulative, frames:', frames.map(f => ({ first: f.firstRoll, second: f.secondRoll, third: f.thirdRoll })))
     }
     
-    console.log('Final frames before setExtractedFrames:', frames.map(f => ({ first: f.firstRoll, second: f.secondRoll, third: f.thirdRoll, score: f.score })))
+    console.log('Final frames before setExtractedFrames:', frames.map((f, i) => ({
+      frame: i + 1,
+      firstRoll: f.firstRoll,
+      secondRoll: f.secondRoll,
+      thirdRoll: f.thirdRoll,
+      score: f.score,
+      isStrike: f.isStrike,
+      isSpare: f.isSpare,
+      isOpen: f.isOpen
+    })))
     setExtractedFrames(frames)
   }
 
