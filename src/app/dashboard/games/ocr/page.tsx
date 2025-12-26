@@ -39,7 +39,10 @@ export default function OCRPage() {
     location_name: '',
     location_address: '',
     notes: '',
+    balls_used: [] as string[],
+    oil_pattern: '',
   })
+  const [newBallName, setNewBallName] = useState('')
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -920,6 +923,8 @@ export default function OCRPage() {
         location_name: formData.location_name || null,
         location_address: formData.location_address || null,
         notes: formData.notes || null,
+        balls_used: formData.balls_used.length > 0 ? formData.balls_used : null,
+        oil_pattern: formData.oil_pattern || null,
         score_source: 'ocr',
         score_photo_url: photoUrl,
         ocr_confidence: detectedBowlers[selectedBowlerIndex!]?.confidence || 0.5,
