@@ -153,7 +153,21 @@ export default function OCRPage() {
         console.log('Falling back to Tesseract.js:', apiError.message)
         const tesseract = await import('tesseract.js')
         const worker = await tesseract.createWorker('eng')
-        const { data } = await worker.recognize(imageFile as string)
+        
+        // Convert File/Blob to data URL for Tesseract
+        let imageDataUrl: string
+        if (typeof imageFile === 'string') {
+          imageDataUrl = imageFile
+        } else {
+          imageDataUrl = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader()
+            reader.onload = () => resolve(reader.result as string)
+            reader.onerror = reject
+            reader.readAsDataURL(imageFile)
+          })
+        }
+        
+        const { data } = await worker.recognize(imageDataUrl)
         await worker.terminate()
         
         ocrText = data.text || ''
