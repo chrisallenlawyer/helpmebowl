@@ -394,10 +394,11 @@ export default function OCRPage() {
           }
         }
       }
-      
-      // Also try text-based line parsing (more reliable for Google Vision)
-      // Look for pairs of lines: individual balls (top) + cumulative totals (bottom)
-      const lines = text.split('\n').filter(line => line.trim().length > 0)
+    }
+    
+    // Also try text-based line parsing (more reliable for Google Vision)
+    // Look for pairs of lines: individual balls (top) + cumulative totals (bottom)
+    const lines = text.split('\n').filter(line => line.trim().length > 0)
       
       // First, identify lines with exactly 10 cumulative scores (bottom rows)
       const cumulativeScoreLines: Array<{ lineIndex: number; scores: number[]; line: string }> = []
@@ -579,8 +580,8 @@ export default function OCRPage() {
         }
         })
       }
-      
-      // Sort by confidence, prefer cumulative sequences and named bowlers
+    
+    // Sort by confidence, prefer cumulative sequences and named bowlers
       bowlers.sort((a, b) => {
         if (b.confidence !== a.confidence) return b.confidence - a.confidence
         // If confidence is same, prefer named bowlers
