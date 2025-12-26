@@ -290,7 +290,6 @@ export default function OCRPage() {
     // Extract cumulative scores and create Frame objects
     // Convert detected cumulative frame scores to Frame objects
     // OCR typically gives us cumulative scores: [frame1_total, frame2_total, ..., frame10_total]
-    // We store the cumulative score, and calculate individual frame contributions where possible
     const frames: Frame[] = Array(10).fill(null).map(() => ({
       firstRoll: null,
       secondRoll: null,
@@ -302,11 +301,22 @@ export default function OCRPage() {
       frameScore: null,
     }))
 
-    // If we have individual ball data from OCR, use it directly (more accurate)
-    if (bowler.individualBalls && bowler.individualBalls.length > 0) {
-      for (let i = 0; i < 10 && i < bowler.individualBalls.length; i++) {
+    // Process all 10 frames - always set cumulative scores from bowler.frameScores
+    for (let i = 0; i < 10; i++) {
+      // Set cumulative score for this frame
+      if (bowler.frameScores[i] !== null) {
+        const cumulativeScore = bowler.frameScores[i] as number
+        const previousScore = i > 0 && bowler.frameScores[i - 1] !== null 
+          ? bowler.frameScores[i - 1] as number 
+          : 0
+        
+        frames[i].score = cumulativeScore
+        frames[i].frameScore = cumulativeScore - previousScore
+      }
+
+      // If we have individual ball data from OCR, use it for roll details (more accurate)
+      if (bowler.individualBalls && bowler.individualBalls.length > i) {
         const ball = bowler.individualBalls[i]
-        const cumulativeScore = bowler.frameScores[i] !== null ? bowler.frameScores[i] as number : null
         
         if (ball.first === 'X') {
           frames[i].firstRoll = 10
@@ -323,20 +333,21 @@ export default function OCRPage() {
               frames[i].isOpen = true
             }
           }
+          
+          // Handle 10th frame third roll
+          if (i === 9 && ball.third !== null && ball.third !== undefined) {
+            if (ball.third === 'X') {
+              frames[i].thirdRoll = 10
+            } else if (ball.third === '/') {
+              frames[i].thirdRoll = 10 - (frames[i].secondRoll || 0)
+            } else {
+              frames[i].thirdRoll = ball.third as number
+            }
+          }
         }
-        
-        // Store cumulative score if available
-        if (cumulativeScore !== null) {
-          frames[i].score = cumulativeScore
-          const previousScore = i > 0 && bowler.frameScores[i - 1] !== null 
-            ? bowler.frameScores[i - 1] as number 
-            : 0
-          frames[i].frameScore = cumulativeScore - previousScore
-        }
-      }
-    } else {
-      // Fallback: Infer from cumulative scores (less accurate)
-      for (let i = 0; i < 10; i++) {
+      } else {
+        // Fallback: Infer rolls from cumulative scores (less accurate)
+        // Only do this if we don't have individual ball data
         if (bowler.frameScores[i] !== null) {
           const cumulativeScore = bowler.frameScores[i] as number
           const previousScore = i > 0 && bowler.frameScores[i - 1] !== null 
@@ -346,23 +357,28 @@ export default function OCRPage() {
           // Calculate this frame's contribution (points added this frame)
           const framePoints = cumulativeScore - previousScore
           
-          // Store cumulative score
-          frames[i].score = cumulativeScore
-          frames[i].frameScore = framePoints
-          
           // Try to infer frame type and rolls based on points added
-          // Note: This is an approximation - we can't know exact rolls from cumulative alone
           if (framePoints >= 30) {
             // Perfect frame - strike with two strikes following
             frames[i].firstRoll = 10
             frames[i].isStrike = true
+            if (i === 9) {
+              frames[i].secondRoll = 10
+              frames[i].thirdRoll = 10
+            }
           } else if (framePoints >= 20 && framePoints < 30) {
             // Strike with bonus (20-29 points)
             frames[i].firstRoll = 10
             frames[i].isStrike = true
+            if (i === 9) {
+              // Estimate second and third rolls for 10th frame
+              const remainingPoints = framePoints - 10
+              frames[i].secondRoll = Math.floor(remainingPoints / 2)
+              frames[i].thirdRoll = remainingPoints - (frames[i].secondRoll || 0)
+            }
           } else if (framePoints === 10 && i < 9) {
-            // Could be spare or open frame - default to spare
-            frames[i].firstRoll = 5 // Estimate
+            // Could be spare - default to spare
+            frames[i].firstRoll = 5
             frames[i].secondRoll = 5
             frames[i].isSpare = true
           } else if (framePoints < 10) {
