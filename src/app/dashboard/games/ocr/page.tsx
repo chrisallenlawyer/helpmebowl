@@ -476,25 +476,27 @@ export default function OCRPage() {
           } else if (points < 10) {
             // Open frame - split pins
             // Try to make it reasonable (e.g., if points = 9, could be 5+4, 6+3, etc.)
-            frames[i].firstRoll = Math.floor(points / 2)
-            frames[i].secondRoll = points - frames[i].firstRoll
+            const firstRoll = Math.floor(points / 2)
+            frames[i].firstRoll = firstRoll
+            frames[i].secondRoll = points - firstRoll
             frames[i].isOpen = true
           }
-        } else {
-          // No next frame data, use simple heuristics
-          if (points >= 20) {
-            frames[i].firstRoll = 10
-            frames[i].isStrike = true
-          } else if (points === 10) {
-            frames[i].firstRoll = 5
-            frames[i].secondRoll = 5
-            frames[i].isSpare = true
           } else {
-            frames[i].firstRoll = Math.floor(points / 2)
-            frames[i].secondRoll = points - frames[i].firstRoll
-            frames[i].isOpen = true
+            // No next frame data, use simple heuristics
+            if (points >= 20) {
+              frames[i].firstRoll = 10
+              frames[i].isStrike = true
+            } else if (points === 10) {
+              frames[i].firstRoll = 5
+              frames[i].secondRoll = 5
+              frames[i].isSpare = true
+            } else {
+              const firstRoll = Math.floor(points / 2)
+              frames[i].firstRoll = firstRoll
+              frames[i].secondRoll = points - firstRoll
+              frames[i].isOpen = true
+            }
           }
-        }
       }
 
       // Handle frame 10 separately
@@ -523,8 +525,9 @@ export default function OCRPage() {
           frames[9].thirdRoll = 0 // Default
         } else {
           // Open frame
-          frames[9].firstRoll = Math.floor(points / 2)
-          frames[9].secondRoll = points - frames[9].firstRoll
+          const firstRoll = Math.floor(points / 2)
+          frames[9].firstRoll = firstRoll
+          frames[9].secondRoll = points - firstRoll
           frames[9].isOpen = true
         }
       }
