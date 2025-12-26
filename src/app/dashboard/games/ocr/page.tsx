@@ -252,33 +252,49 @@ export default function OCRPage() {
         if (isLikelyBallResults) {
           // Check if there are more lines above that might be part of the same ball results
           // Sometimes OCR splits the ball results across multiple lines
-          let combinedLine = candidateLine
-          let combinedIndex = i
+          // We'll collect lines going backwards until we hit something that doesn't look like ball results
+          const collectedLines: Array<{ index: number; line: string }> = []
+          collectedLines.push({ index: i, line: candidateLine })
+          usedBallResultsLineIndices.add(i)
           
           // Try to combine with previous lines if they also look like ball results
-          for (let j = i - 1; j >= Math.max(0, i - 2); j--) {
+          // Look back up to 5 lines to find the complete ball results sequence
+          for (let j = i - 1; j >= Math.max(0, i - 6); j--) {
             if (usedBallResultsLineIndices.has(j)) break
             
             const prevLine = lines[j].trim()
+            if (prevLine.length === 0) continue
+            
             const prevLetterCount = (prevLine.match(/[A-Za-z]/g) || []).length
             const prevDigitCount = (prevLine.match(/\d/g) || []).length
             const prevHasStrikeOrSpare = /[Xx\/]/.test(prevLine)
             const prevBowlingCharCount = (prevLine.match(/[Xx\/\d-]/g) || []).length
             
-            // If previous line also looks like ball results (not a name), combine them
-            if (prevHasStrikeOrSpare || (prevDigitCount > 2 && prevLetterCount < prevLine.length * 0.3)) {
-              combinedLine = prevLine + ' ' + combinedLine
-              combinedIndex = j
+            // If previous line also looks like ball results (has bowling chars and not mostly letters), add it
+            // Be more lenient - accept lines with bowling characters even if they're short
+            const looksLikeBallResults = (prevHasStrikeOrSpare || prevDigitCount >= 2) && 
+                                        prevLetterCount < prevLine.length * 0.4 &&
+                                        prevBowlingCharCount >= 2
+            
+            // Also check if it's likely a name - skip those
+            const looksLikeName = /^[A-Z][A-Z\s]+$/i.test(prevLine.replace(/[^A-Z\s]/gi, '')) && 
+                                 prevLine.replace(/[^A-Z]/gi, '').length > 2 && 
+                                 prevLine.length < 30
+            
+            if (looksLikeBallResults && !looksLikeName) {
+              collectedLines.unshift({ index: j, line: prevLine }) // Add to beginning
               usedBallResultsLineIndices.add(j)
+              console.log(`    Combining line ${j}: "${prevLine}"`)
             } else {
+              // If we hit something that doesn't look like ball results, stop
               break
             }
           }
           
-          ballResultsLine = combinedLine
-          ballResultsLineIndex = combinedIndex
-          usedBallResultsLineIndices.add(combinedIndex)
-          console.log(`  Found ball results line for ${bowlerName || 'unknown'} at line ${combinedIndex}: "${ballResultsLine}"`)
+          // Combine all collected lines
+          ballResultsLine = collectedLines.map(l => l.line).join(' ')
+          ballResultsLineIndex = collectedLines[0].index
+          console.log(`  Found ball results line for ${bowlerName || 'unknown'} (combined from ${collectedLines.length} lines, starting at ${ballResultsLineIndex}): "${ballResultsLine}"`)
           break
         }
       }
