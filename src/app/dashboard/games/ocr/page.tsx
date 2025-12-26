@@ -386,7 +386,6 @@ export default function OCRPage() {
   const handleBowlerSelect = (index: number) => {
     setSelectedBowlerIndex(index)
     extractFramesFromBowler(detectedBowlers[index])
-    setEditingFrames(false)
   }
 
   // Update gameState when extractedFrames changes
@@ -648,7 +647,6 @@ export default function OCRPage() {
                   setDetectedBowlers([])
                   setSelectedBowlerIndex(null)
                   setExtractedFrames(null)
-                  setEditingFrames(true)
               }}
               className="w-full bg-gray-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-gray-700"
             >
