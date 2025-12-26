@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createWorker } from 'tesseract.js'
-import { getGameStateFromFrames, type Frame, type GameState } from '@/lib/bowling'
+import { getGameStateFromFrames, calculateMaxScore, validateRoll, type Frame, type GameState } from '@/lib/bowling'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,6 +28,10 @@ export default function OCRPage() {
   const [detectedBowlers, setDetectedBowlers] = useState<DetectedBowler[]>([])
   const [selectedBowlerIndex, setSelectedBowlerIndex] = useState<number | null>(null)
   const [extractedFrames, setExtractedFrames] = useState<Frame[] | null>(null)
+  const [editingFrames, setEditingFrames] = useState(false)
+  const [gameState, setGameState] = useState<GameState | null>(null)
+  const [currentFrame, setCurrentFrame] = useState(0)
+  const [maxScore, setMaxScore] = useState(300)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
@@ -130,36 +134,31 @@ export default function OCRPage() {
   const parseBowlingScores = (text: string, words: any[]): DetectedBowler[] => {
     const bowlers: DetectedBowler[] = []
     
-    // Strategy 1: Use word positions to detect tabular structure (rows = bowlers, columns = frames)
+    // Strategy: Look for rows with names followed by frame numbers (1-10) and total
+    // Structure: [Name] [Frame1] [Frame2] ... [Frame10] [Total]
+    
     if (words && words.length > 0) {
-      // Group words by approximate Y position (rows)
+      // Group words by Y position (rows)
       const rows: any[][] = []
-      const yTolerance = 10 // pixels - words on same row should have similar Y
+      const yTolerance = 15 // pixels - words on same row
       
-      words
-        .filter(w => {
-          // Filter to numbers that could be scores
-          const num = parseInt(w.text.trim().replace(/[^\d]/g, ''))
-          return !isNaN(num) && num >= 0 && num <= 300
-        })
-        .forEach(word => {
-          const wordY = word.bbox.y0
-          // Find existing row with similar Y position
-          let foundRow = false
-          for (const row of rows) {
-            if (row.length > 0) {
-              const rowY = row[0].bbox.y0
-              if (Math.abs(wordY - rowY) < yTolerance) {
-                row.push(word)
-                foundRow = true
-                break
-              }
+      words.forEach(word => {
+        const wordY = word.bbox.y0
+        let foundRow = false
+        for (const row of rows) {
+          if (row.length > 0) {
+            const rowY = row[0].bbox.y0
+            if (Math.abs(wordY - rowY) < yTolerance) {
+              row.push(word)
+              foundRow = true
+              break
             }
           }
-          if (!foundRow) {
-            rows.push([word])
-          }
-        })
+        }
+        if (!foundRow) {
+          rows.push([word])
+        }
+      })
       
       // Sort each row by X position (left to right)
       rows.forEach(row => {
@@ -172,131 +171,131 @@ export default function OCRPage() {
         return a[0].bbox.y0 - b[0].bbox.y0
       })
       
-      // Process each row as a potential bowler
+      // Look for rows that start with text (name) followed by 10+ numbers (frames + total)
+      const candidateRows: any[][] = []
+      
       rows.forEach(row => {
-        if (row.length >= 10) {
-          // Extract numbers from words
-          const numbers = row
-            .map(w => {
-              const num = parseInt(w.text.trim().replace(/[^\d]/g, ''))
-              return !isNaN(num) && num >= 0 && num <= 300 ? num : null
-            })
-            .filter(n => n !== null) as number[]
-          
-          if (numbers.length >= 10) {
-            // Take first 10 as frame scores, 11th as total if available
-            const frames = numbers.slice(0, 10)
-            const total = numbers[10] || null
-            
-            // Validate: frame scores should be cumulative (monotonically increasing)
-            // Or at least have reasonable values
-            const isCumulative = frames.every((f, i) => i === 0 || f >= frames[i - 1])
-            const hasValidRange = frames.every(f => f >= 0 && f <= 300)
-            const finalScoreReasonable = !total || (total >= frames[9] && total <= 300)
-            
-            if (hasValidRange && (isCumulative || finalScoreReasonable)) {
-              bowlers.push({
-                frameScores: frames,
-                totalScore: total,
-                confidence: isCumulative ? 0.9 : 0.7,
-              })
-            }
+        // Check if row has text at the start (potential name) followed by numbers
+        let hasTextStart = false
+        let numberCount = 0
+        
+        for (let i = 0; i < Math.min(5, row.length); i++) {
+          const word = row[i]
+          const text = word.text.trim()
+          // Check if it's mostly text (not just numbers)
+          if (!/^\d+$/.test(text) && text.length > 0) {
+            hasTextStart = true
+            break
           }
         }
-      })
-    }
-    
-    // Strategy 2: Fallback to text-based parsing if positional data doesn't work
-    if (bowlers.length === 0) {
-      const lines = text.split('\n').filter(line => line.trim().length > 0)
-      
-      // Look for lines with multiple numbers (potential score rows)
-      lines.forEach(line => {
-        const numbers: number[] = []
-        const numberPattern = /\b(\d{1,3})\b/g
-        let match
         
-        while ((match = numberPattern.exec(line)) !== null) {
-          const num = parseInt(match[1])
-          if (num >= 0 && num <= 300) {
+        // Count numbers in row
+        row.forEach(word => {
+          const num = parseInt(word.text.trim().replace(/[^\d]/g, ''))
+          if (!isNaN(num) && num >= 0 && num <= 300) {
+            numberCount++
+          }
+        })
+        
+        // Row should have name-like text at start and 10-12 numbers (frames + total)
+        if (hasTextStart && numberCount >= 10 && numberCount <= 12) {
+          candidateRows.push(row)
+        }
+      })
+      
+      // Process candidate rows (limit to max 3 bowlers)
+      candidateRows.slice(0, 3).forEach(row => {
+        // Extract numbers from the row (skip the name part)
+        const numbers: number[] = []
+        let startIndex = 0
+        
+        // Find where numbers start (skip name)
+        for (let i = 0; i < row.length; i++) {
+          const text = row[i].text.trim()
+          const num = parseInt(text.replace(/[^\d]/g, ''))
+          if (!isNaN(num) && num >= 0 && num <= 300) {
+            startIndex = i
+            break
+          }
+        }
+        
+        // Extract numbers
+        for (let i = startIndex; i < row.length; i++) {
+          const text = row[i].text.trim()
+          const num = parseInt(text.replace(/[^\d]/g, ''))
+          if (!isNaN(num) && num >= 0 && num <= 300) {
             numbers.push(num)
           }
         }
         
-        // If we found 10+ numbers, it might be a bowler row
         if (numbers.length >= 10) {
+          // Take first 10 as frame scores, last as total if there are 11+
           const frames = numbers.slice(0, 10)
-          const total = numbers[10] || null
+          const total = numbers.length >= 11 ? numbers[numbers.length - 1] : null
           
-          // Check if this looks like valid bowling scores
+          // Validate: frame scores should be cumulative (monotonically increasing)
           const isCumulative = frames.every((f, i) => i === 0 || f >= frames[i - 1])
           const hasValidRange = frames.every(f => f >= 0 && f <= 300)
+          const finalScoreReasonable = !total || (total >= frames[9] && total <= 300)
           
-          if (hasValidRange) {
-            // Avoid duplicates
-            const isDuplicate = bowlers.some(b => 
-              b.frameScores.length === frames.length &&
-              b.frameScores.every((f, i) => f === frames[i])
-            )
-            
-            if (!isDuplicate) {
-              bowlers.push({
-                frameScores: frames,
-                totalScore: total,
-                confidence: isCumulative ? 0.8 : 0.6,
-              })
-            }
+          if (hasValidRange && isCumulative && finalScoreReasonable) {
+            // Validate using bowling calculator if we have frame data
+            // For now, we'll validate in the edit step
+            bowlers.push({
+              frameScores: frames,
+              totalScore: total,
+              confidence: 0.8,
+            })
           }
         }
       })
     }
     
-    // Strategy 3: Last resort - extract all numbers and group into potential sequences
+    // Fallback: text-based parsing
     if (bowlers.length === 0) {
-      const allNumbers: number[] = []
-      const numberPattern = /\b(\d{1,3})\b/g
-      let match
+      const lines = text.split('\n').filter(line => line.trim().length > 0)
       
-      while ((match = numberPattern.exec(text)) !== null) {
-        const num = parseInt(match[1])
-        if (num >= 0 && num <= 300) {
-          allNumbers.push(num)
-        }
-      }
-      
-      // Try to find sequences of 10 numbers
-      for (let i = 0; i <= allNumbers.length - 10; i++) {
-        const sequence = allNumbers.slice(i, i + 11) // 10 frames + possible total
-        const frames = sequence.slice(0, 10)
-        const total = sequence[10] || null
-        
-        // Check if sequence looks valid
-        const isCumulative = frames.every((f, i) => i === 0 || f >= frames[i - 1])
-        const hasValidRange = frames.every(f => f >= 0 && f <= 300)
-        const finalScoreReasonable = !total || (total >= frames[9] && total <= 300)
-        
-        if (hasValidRange && (isCumulative || finalScoreReasonable)) {
-          // Avoid duplicates
-          const isDuplicate = bowlers.some(b => 
-            b.frameScores.length === frames.length &&
-            b.frameScores.every((f, i) => f === frames[i])
-          )
-          
-          if (!isDuplicate) {
-            bowlers.push({
-              frameScores: frames,
-              totalScore: total,
-              confidence: isCumulative ? 0.7 : 0.5,
-            })
+      lines.forEach(line => {
+        // Look for lines with text followed by 10+ numbers
+        const parts = line.trim().split(/\s+/)
+        if (parts.length >= 11) {
+          // Check if first part is text (name)
+          const firstPart = parts[0]
+          if (!/^\d+$/.test(firstPart)) {
+            const numbers: number[] = []
+            
+            // Extract numbers (skip potential name)
+            for (let i = 1; i < parts.length; i++) {
+              const num = parseInt(parts[i].replace(/[^\d]/g, ''))
+              if (!isNaN(num) && num >= 0 && num <= 300) {
+                numbers.push(num)
+              }
+            }
+            
+            if (numbers.length >= 10) {
+              const frames = numbers.slice(0, 10)
+              const total = numbers.length >= 11 ? numbers[numbers.length - 1] : null
+              
+              const isCumulative = frames.every((f, i) => i === 0 || f >= frames[i - 1])
+              
+              if (isCumulative) {
+                bowlers.push({
+                  frameScores: frames,
+                  totalScore: total,
+                  confidence: 0.7,
+                })
+              }
+            }
           }
         }
-      }
+      })
     }
 
-    return bowlers.length > 0 ? bowlers : []
+    return bowlers.slice(0, 3) // Limit to 3 bowlers max
   }
 
   const extractFramesFromBowler = (bowler: DetectedBowler) => {
+    // Extract cumulative scores and create Frame objects
     // Convert detected cumulative frame scores to Frame objects
     // OCR typically gives us cumulative scores: [frame1_total, frame2_total, ..., frame10_total]
     // We store the cumulative score, and calculate individual frame contributions where possible
@@ -363,6 +362,109 @@ export default function OCRPage() {
   const handleBowlerSelect = (index: number) => {
     setSelectedBowlerIndex(index)
     extractFramesFromBowler(detectedBowlers[index])
+    setEditingFrames(false)
+  }
+
+  // Update gameState when extractedFrames changes
+  useEffect(() => {
+    if (extractedFrames) {
+      const newGameState = getGameStateFromFrames(extractedFrames)
+      setGameState(newGameState)
+      
+      // Find first incomplete frame
+      let incompleteFrame = 10
+      for (let i = 0; i < 10; i++) {
+        const frame = newGameState[i]
+        if (frame.firstRoll === null) {
+          incompleteFrame = i
+          break
+        }
+      }
+      setCurrentFrame(incompleteFrame)
+      setMaxScore(calculateMaxScore(newGameState, incompleteFrame))
+    }
+  }, [extractedFrames])
+
+  const handleRollChange = (
+    frameIndex: number,
+    rollNumber: 1 | 2 | 3,
+    value: string
+  ) => {
+    if (!extractedFrames) return
+
+    let numValue: number | null = null
+
+    if (value === '') {
+      numValue = null
+    } else if (value === 'X') {
+      numValue = 10
+    } else if (value === '/') {
+      if (rollNumber === 2 && extractedFrames[frameIndex].firstRoll !== null) {
+        numValue = 10 - extractedFrames[frameIndex].firstRoll!
+      } else {
+        return
+      }
+    } else {
+      const parsed = parseInt(value)
+      if (!isNaN(parsed) && parsed >= 0 && parsed <= 10) {
+        numValue = parsed
+      } else {
+        return
+      }
+    }
+
+    setExtractedFrames(prevFrames => {
+      if (!prevFrames) return prevFrames
+      const newFrames = [...prevFrames]
+      const frame = { ...newFrames[frameIndex] }
+      
+      if (rollNumber === 1) {
+        frame.firstRoll = numValue
+        if (numValue === 10 && frameIndex < 9) {
+          frame.secondRoll = null
+        }
+      } else if (rollNumber === 2) {
+        if (frame.firstRoll === null) return prevFrames
+        if (numValue !== null && !validateRoll(numValue, frameIndex, 2, frame.firstRoll)) {
+          return prevFrames
+        }
+        frame.secondRoll = numValue
+        if (frameIndex === 9 && frame.firstRoll !== null && numValue !== null && frame.firstRoll + numValue < 10) {
+          frame.thirdRoll = null
+        }
+      } else if (rollNumber === 3) {
+        if (frameIndex !== 9) return prevFrames
+        if (frame.secondRoll === null) return prevFrames
+        if (numValue !== null && (numValue < 0 || numValue > 10)) {
+          return prevFrames
+        }
+        frame.thirdRoll = numValue
+      }
+
+      newFrames[frameIndex] = frame
+      return newFrames
+    })
+  }
+
+  const getBall1Value = (frame: Frame): string => {
+    if (frame.firstRoll === null) return ''
+    if (frame.firstRoll === 10) return 'X'
+    return frame.firstRoll.toString()
+  }
+
+  const getBall2Value = (frame: Frame): string => {
+    if (frame.secondRoll === null) return ''
+    if (frame.firstRoll !== null && frame.firstRoll + frame.secondRoll === 10) return '/'
+    return frame.secondRoll.toString()
+  }
+
+  const getCurrentScore = (): number => {
+    if (!gameState) return 0
+    const lastScoredFrame = gameState
+      .slice()
+      .reverse()
+      .find(f => f.score !== null)
+    return lastScoredFrame?.score || 0
   }
 
   const handleSave = async () => {
@@ -415,9 +517,9 @@ export default function OCRPage() {
         setUploadingPhoto(false)
       }
 
-      // Convert extracted frames to game state
-      const gameState = extractedFrames ? getGameStateFromFrames(extractedFrames) : null
-      const finalScore = bowler.totalScore || (gameState?.[9]?.score || 0)
+      // Use current gameState if available, otherwise calculate from extracted frames
+      const finalGameState = gameState || (extractedFrames ? getGameStateFromFrames(extractedFrames) : null)
+      const finalScore = finalGameState?.[9]?.score || bowler.totalScore || 0
 
       // Save game to database
       const { error } = await supabase.from('games').insert({
@@ -430,7 +532,7 @@ export default function OCRPage() {
         score_source: 'ocr',
         score_photo_url: photoUrl,
         ocr_confidence: bowler.confidence,
-        frame_scores: gameState ? gameState.map(f => ({
+        frame_scores: finalGameState ? finalGameState.map(f => ({
           first: f.firstRoll,
           second: f.secondRoll,
           third: f.thirdRoll,
@@ -576,6 +678,204 @@ export default function OCRPage() {
               </button>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Extracted Score Display and Edit */}
+      {selectedBowlerIndex !== null && extractedFrames && gameState && (
+        <div className="bg-white shadow rounded-lg p-6 mb-6">
+          <div className="flex justify-between items-center mb-4">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">Detected Score</h2>
+              <p className="text-sm text-gray-500">Review and edit if needed</p>
+            </div>
+            <button
+              onClick={() => setEditingFrames(!editingFrames)}
+              className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+            >
+              {editingFrames ? 'Done Editing' : 'Edit Frames'}
+            </button>
+          </div>
+
+          {/* Current Score Display */}
+          <div className="bg-gradient-to-r from-indigo-500 to-purple-600 rounded-lg p-4 sm:p-6 mb-6 text-white shadow-lg">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div>
+                <div className="text-sm sm:text-base opacity-90">Current Score</div>
+                <div className="text-3xl sm:text-5xl font-bold">{getCurrentScore()}</div>
+              </div>
+              <div className="text-right">
+                <div className="text-sm sm:text-base opacity-90">Maximum Possible</div>
+                <div className="text-2xl sm:text-4xl font-bold">{maxScore}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Frames Grid */}
+          {editingFrames ? (
+            <div className="bg-gray-50 rounded-lg p-4 sm:p-6 mb-6">
+              <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-2 sm:gap-4">
+                {extractedFrames.map((frame, frameIndex) => {
+                  const isCurrent = frameIndex === currentFrame
+                  return (
+                    <div
+                      key={frameIndex}
+                      className={`border-2 rounded-lg p-2 sm:p-4 ${
+                        isCurrent
+                          ? 'border-indigo-500 bg-indigo-50 ring-2 ring-indigo-200'
+                          : 'border-gray-200 bg-white'
+                      }`}
+                    >
+                      <div className="text-xs font-semibold text-gray-600 mb-1 sm:mb-2">
+                        Frame {frameIndex + 1}
+                        {frameIndex === 9 && <span className="block text-[10px] sm:text-xs">(10th)</span>}
+                      </div>
+
+                      {frameIndex === 9 ? (
+                        <div className="space-y-2">
+                          <div className="space-y-1">
+                            <label className="text-xs text-gray-500 font-medium">Ball 1</label>
+                            <select
+                              value={getBall1Value(frame)}
+                              onChange={(e) => handleRollChange(frameIndex, 1, e.target.value)}
+                              className="w-full text-center text-black font-bold text-base sm:text-lg px-2 py-1.5 sm:py-2 border border-gray-300 rounded bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                            >
+                              <option value="">-</option>
+                              {[...Array(10)].map((_, i) => (
+                                <option key={i} value={i}>
+                                  {i}
+                                </option>
+                              ))}
+                              <option value="X">X</option>
+                            </select>
+                          </div>
+                          {frame.firstRoll !== null && (
+                            <div className="space-y-1">
+                              <label className="text-xs text-gray-500 font-medium">Ball 2</label>
+                              {frame.firstRoll === 10 ? (
+                                <select
+                                  value={frame.secondRoll === null ? '' : frame.secondRoll === 10 ? 'X' : frame.secondRoll.toString()}
+                                  onChange={(e) => handleRollChange(frameIndex, 2, e.target.value)}
+                                  className="w-full text-center text-black font-bold text-base sm:text-lg px-2 py-1.5 sm:py-2 border border-gray-300 rounded bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                >
+                                  <option value="">-</option>
+                                  {[...Array(11)].map((_, i) => (
+                                    <option key={i} value={i}>
+                                      {i}
+                                    </option>
+                                  ))}
+                                  <option value="X">X</option>
+                                </select>
+                              ) : (
+                                <select
+                                  value={getBall2Value(frame)}
+                                  onChange={(e) => handleRollChange(frameIndex, 2, e.target.value)}
+                                  className="w-full text-center text-black font-bold text-base sm:text-lg px-2 py-1.5 sm:py-2 border border-gray-300 rounded bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                >
+                                  <option value="">-</option>
+                                  {[...Array(11 - frame.firstRoll)].map((_, i) => (
+                                    <option key={i} value={i}>
+                                      {i}
+                                    </option>
+                                  ))}
+                                  <option value="/">/</option>
+                                </select>
+                              )}
+                            </div>
+                          )}
+                          {(frame.isStrike || frame.isSpare) && (
+                            <div className="space-y-1">
+                              <label className="text-xs text-gray-500 font-medium">Ball 3</label>
+                              <select
+                                value={frame.thirdRoll === null || frame.thirdRoll === undefined ? '' : frame.thirdRoll === 10 ? 'X' : frame.thirdRoll.toString()}
+                                onChange={(e) => handleRollChange(frameIndex, 3, e.target.value)}
+                                disabled={frame.secondRoll === null}
+                                className="w-full text-center text-black font-bold text-base sm:text-lg px-2 py-1.5 sm:py-2 border border-gray-300 rounded bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                              >
+                                <option value="">-</option>
+                                {[...Array(11)].map((_, i) => (
+                                  <option key={i} value={i}>
+                                    {i}
+                                  </option>
+                                ))}
+                                <option value="X">X</option>
+                              </select>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <div className="space-y-1">
+                            <label className="text-xs text-gray-500 font-medium">Ball 1</label>
+                            <select
+                              value={getBall1Value(frame)}
+                              onChange={(e) => handleRollChange(frameIndex, 1, e.target.value)}
+                              className={`w-full text-center text-black font-bold text-base sm:text-lg px-2 py-1.5 sm:py-2 border rounded bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 ${
+                                frame.firstRoll === 10
+                                  ? 'bg-indigo-100 border-indigo-300'
+                                  : 'border-gray-300'
+                              }`}
+                            >
+                              <option value="">-</option>
+                              {[...Array(10)].map((_, i) => (
+                                <option key={i} value={i}>
+                                  {i}
+                                </option>
+                              ))}
+                              <option value="X">X</option>
+                            </select>
+                          </div>
+                          {frame.firstRoll !== null && frame.firstRoll < 10 && (
+                            <div className="space-y-1">
+                              <label className="text-xs text-gray-500 font-medium">Ball 2</label>
+                              <select
+                                value={getBall2Value(frame)}
+                                onChange={(e) => handleRollChange(frameIndex, 2, e.target.value)}
+                                className={`w-full text-center text-black font-bold text-base sm:text-lg px-2 py-1.5 sm:py-2 border rounded bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 ${
+                                  frame.isSpare
+                                    ? 'bg-purple-100 border-purple-300'
+                                    : 'border-gray-300'
+                                }`}
+                              >
+                                <option value="">-</option>
+                                {[...Array(11 - frame.firstRoll)].map((_, i) => (
+                                  <option key={i} value={i}>
+                                    {i}
+                                  </option>
+                                ))}
+                                <option value="/">/</option>
+                              </select>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {gameState[frameIndex]?.score !== null && (
+                        <div className="mt-1 sm:mt-2 text-center">
+                          <div className="text-base sm:text-xl font-bold text-gray-900">
+                            {gameState[frameIndex].score}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          ) : (
+            <div className="bg-gray-50 rounded-lg p-4">
+              <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-2">
+                {gameState.map((frame, index) => (
+                  <div key={index} className="border border-gray-300 rounded-lg p-2 text-center">
+                    <div className="text-xs text-gray-600 mb-1">Frame {index + 1}</div>
+                    <div className="text-lg font-bold text-gray-900">
+                      {frame.score !== null ? frame.score : '-'}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
