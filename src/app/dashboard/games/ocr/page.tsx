@@ -138,7 +138,7 @@ export default function OCRPage() {
   }
 
   const parseBowlingScores = (text: string, words: any[]): DetectedBowler[] => {
-    const bowlers: DetectedBowler[] = []
+    let bowlers: DetectedBowler[] = []
     
     // Strategy 1: Extract ALL numbers from text first (works even with messy OCR)
     const allNumbers: number[] = []
