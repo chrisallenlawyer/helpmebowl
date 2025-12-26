@@ -111,8 +111,14 @@ export default function OCRPage() {
       const { data } = await worker.recognize(imageFile)
       await worker.terminate()
 
+      // Debug: Log detected text (can be removed in production)
+      console.log('OCR Text:', data.text)
+      console.log('OCR Words count:', data.words?.length || 0)
+
       // Parse the OCR data to find bowling scores using both text and structure
       const bowlers = parseBowlingScores(data.text, data.words || [])
+      
+      console.log('Detected bowlers:', bowlers.length, bowlers)
       
       if (bowlers.length === 0) {
         setError('No bowling scores detected in the image. Please try again with a clearer photo.')
@@ -134,13 +140,13 @@ export default function OCRPage() {
   const parseBowlingScores = (text: string, words: any[]): DetectedBowler[] => {
     const bowlers: DetectedBowler[] = []
     
-    // Strategy: Look for rows with names followed by frame numbers (1-10) and total
-    // Structure: [Name] [Frame1] [Frame2] ... [Frame10] [Total]
+    // Strategy: Look for rows with 10-12 numbers in sequence (frames + total)
+    // Prefer rows that start with text (names), but don't require it
     
     if (words && words.length > 0) {
       // Group words by Y position (rows)
       const rows: any[][] = []
-      const yTolerance = 15 // pixels - words on same row
+      const yTolerance = 20 // pixels - words on same row (increased tolerance)
       
       words.forEach(word => {
         const wordY = word.bbox.y0
@@ -171,65 +177,53 @@ export default function OCRPage() {
         return a[0].bbox.y0 - b[0].bbox.y0
       })
       
-      // Look for rows that start with text (name) followed by 10+ numbers (frames + total)
+      // Look for rows with 10-12 numbers (frames + total)
       const candidateRows: any[][] = []
       
       rows.forEach(row => {
-        // Check if row has text at the start (potential name) followed by numbers
-        let hasTextStart = false
-        let numberCount = 0
-        
-        for (let i = 0; i < Math.min(5, row.length); i++) {
-          const word = row[i]
-          const text = word.text.trim()
-          // Check if it's mostly text (not just numbers)
-          if (!/^\d+$/.test(text) && text.length > 0) {
-            hasTextStart = true
-            break
-          }
-        }
-        
         // Count numbers in row
+        let numberCount = 0
         row.forEach(word => {
-          const num = parseInt(word.text.trim().replace(/[^\d]/g, ''))
+          const text = word.text.trim()
+          const num = parseInt(text.replace(/[^\d]/g, ''))
           if (!isNaN(num) && num >= 0 && num <= 300) {
             numberCount++
           }
         })
         
-        // Row should have name-like text at start and 10-12 numbers (frames + total)
-        if (hasTextStart && numberCount >= 10 && numberCount <= 12) {
+        // Row should have 10-12 numbers (frames + total)
+        if (numberCount >= 10 && numberCount <= 15) {
           candidateRows.push(row)
         }
       })
       
       // Process candidate rows (limit to max 3 bowlers)
-      candidateRows.slice(0, 3).forEach(row => {
-        // Extract numbers from the row (skip the name part)
+      candidateRows.slice(0, 5).forEach(row => {
+        // Extract numbers from the row
         const numbers: number[] = []
-        let startIndex = 0
+        let hasTextStart = false
         
-        // Find where numbers start (skip name)
-        for (let i = 0; i < row.length; i++) {
+        // Check first few words for text (names)
+        for (let i = 0; i < Math.min(3, row.length); i++) {
           const text = row[i].text.trim()
-          const num = parseInt(text.replace(/[^\d]/g, ''))
-          if (!isNaN(num) && num >= 0 && num <= 300) {
-            startIndex = i
+          if (!/^\d+$/.test(text) && text.length > 1) {
+            hasTextStart = true
             break
           }
         }
         
-        // Extract numbers
-        for (let i = startIndex; i < row.length; i++) {
-          const text = row[i].text.trim()
+        // Extract all numbers from the row
+        row.forEach(word => {
+          const text = word.text.trim()
           const num = parseInt(text.replace(/[^\d]/g, ''))
           if (!isNaN(num) && num >= 0 && num <= 300) {
             numbers.push(num)
           }
-        }
+        })
         
         if (numbers.length >= 10) {
-          // Take first 10 as frame scores, last as total if there are 11+
+          // Take first 10 as frame scores
+          // If there are 11+, the last one is likely the total
           const frames = numbers.slice(0, 10)
           const total = numbers.length >= 11 ? numbers[numbers.length - 1] : null
           
@@ -238,57 +232,84 @@ export default function OCRPage() {
           const hasValidRange = frames.every(f => f >= 0 && f <= 300)
           const finalScoreReasonable = !total || (total >= frames[9] && total <= 300)
           
-          if (hasValidRange && isCumulative && finalScoreReasonable) {
-            // Validate using bowling calculator if we have frame data
-            // For now, we'll validate in the edit step
-            bowlers.push({
-              frameScores: frames,
-              totalScore: total,
-              confidence: 0.8,
-            })
+          // Very lenient validation - accept if numbers are in valid range
+          // Don't require cumulative - sometimes OCR misreads order
+          if (hasValidRange) {
+            // Avoid exact duplicates
+            const isDuplicate = bowlers.some(b => 
+              b.frameScores.length === frames.length &&
+              b.frameScores.every((f, i) => f === frames[i]) &&
+              b.totalScore === total
+            )
+            
+            if (!isDuplicate) {
+              bowlers.push({
+                frameScores: frames,
+                totalScore: total,
+                confidence: isCumulative && hasTextStart ? 0.85 : isCumulative ? 0.75 : 0.65,
+              })
+            }
           }
         }
       })
+      
+      // Sort by confidence and take top 3
+      bowlers.sort((a, b) => b.confidence - a.confidence)
     }
     
-    // Fallback: text-based parsing
+    // Fallback: text-based parsing - look for lines with 10+ consecutive numbers
     if (bowlers.length === 0) {
       const lines = text.split('\n').filter(line => line.trim().length > 0)
       
       lines.forEach(line => {
-        // Look for lines with text followed by 10+ numbers
-        const parts = line.trim().split(/\s+/)
-        if (parts.length >= 11) {
-          // Check if first part is text (name)
-          const firstPart = parts[0]
-          if (!/^\d+$/.test(firstPart)) {
-            const numbers: number[] = []
+        // Extract all numbers from the line
+        const numbers: number[] = []
+        const numberPattern = /\b(\d{1,3})\b/g
+        let match
+        
+        while ((match = numberPattern.exec(line)) !== null) {
+          const num = parseInt(match[1])
+          if (num >= 0 && num <= 300) {
+            numbers.push(num)
+          }
+        }
+        
+        // If we found 10+ numbers, it might be a bowler row
+        if (numbers.length >= 10) {
+          // Try different starting points to find the best sequence
+          for (let start = 0; start <= numbers.length - 10; start++) {
+            const frames = numbers.slice(start, start + 10)
+            const total = start + 10 < numbers.length ? numbers[start + 10] : null
             
-            // Extract numbers (skip potential name)
-            for (let i = 1; i < parts.length; i++) {
-              const num = parseInt(parts[i].replace(/[^\d]/g, ''))
-              if (!isNaN(num) && num >= 0 && num <= 300) {
-                numbers.push(num)
-              }
-            }
+            // Check if this looks like valid bowling scores
+            const isCumulative = frames.every((f, i) => i === 0 || f >= frames[i - 1])
+            const hasValidRange = frames.every(f => f >= 0 && f <= 300)
+            const finalScoreReasonable = !total || (total >= frames[9] && total <= 300)
             
-            if (numbers.length >= 10) {
-              const frames = numbers.slice(0, 10)
-              const total = numbers.length >= 11 ? numbers[numbers.length - 1] : null
+            // More lenient - accept if valid range, prefer cumulative
+            if (hasValidRange) {
+              // Avoid duplicates
+              const isDuplicate = bowlers.some(b => 
+                b.frameScores.length === frames.length &&
+                b.frameScores.every((f, i) => f === frames[i]) &&
+                b.totalScore === total
+              )
               
-              const isCumulative = frames.every((f, i) => i === 0 || f >= frames[i - 1])
-              
-              if (isCumulative) {
+              if (!isDuplicate) {
                 bowlers.push({
                   frameScores: frames,
                   totalScore: total,
-                  confidence: 0.7,
+                  confidence: isCumulative ? 0.7 : 0.5,
                 })
+                break // Take first valid sequence from this line
               }
             }
           }
         }
       })
+      
+      // Sort by confidence
+      bowlers.sort((a, b) => b.confidence - a.confidence)
     }
 
     return bowlers.slice(0, 3) // Limit to 3 bowlers max
