@@ -391,8 +391,7 @@ export default function OCRPage() {
             }
           }
           
-          console.log(`Parsed individual balls:`, individualBalls)
-        }
+        console.log(`Parsed individual balls:`, individualBalls)
       }
       
       // Avoid duplicates
