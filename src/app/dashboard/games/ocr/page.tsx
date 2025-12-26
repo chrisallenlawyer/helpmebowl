@@ -4,7 +4,6 @@ import { useState, useRef, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-// Tesseract.js will be imported dynamically as fallback
 import { getGameStateFromFrames, calculateMaxScore, validateRoll, type Frame, type GameState } from '@/lib/bowling'
 
 export const dynamic = 'force-dynamic'
@@ -116,74 +115,47 @@ export default function OCRPage() {
       let ocrWords: any[] = []
       let allNumbers: number[] = []
 
-      // Try Google Vision API first (server-side, more accurate)
-      try {
-        const formData = new FormData()
-        
-        // Convert image to File if it's a string (data URL)
-        if (typeof imageFile === 'string') {
-          const response = await fetch(imageFile)
-          const blob = await response.blob()
-          formData.append('image', blob, 'image.jpg')
-        } else {
-          formData.append('image', imageFile)
-        }
+      // Use Google Vision API (server-side, more accurate)
+      const formData = new FormData()
+      
+      // Convert image to File if it's a string (data URL)
+      if (typeof imageFile === 'string') {
+        const response = await fetch(imageFile)
+        const blob = await response.blob()
+        formData.append('image', blob, 'image.jpg')
+      } else {
+        formData.append('image', imageFile)
+      }
 
-        const ocrResponse = await fetch('/api/ocr', {
-          method: 'POST',
-          body: formData,
-        })
+      const ocrResponse = await fetch('/api/ocr', {
+        method: 'POST',
+        body: formData,
+      })
 
-        if (ocrResponse.ok) {
-          const ocrData = await ocrResponse.json()
-          ocrText = ocrData.text || ''
-          ocrWords = ocrData.words || []
-          allNumbers = ocrData.allNumbers || []
-          console.log('Google Vision OCR successful')
+      if (!ocrResponse.ok) {
+        const errorData = await ocrResponse.json()
+        if (errorData.error === 'Google Vision API key not configured' || errorData.requiresSetup) {
+          throw new Error('Google Vision API is not configured. Please set up the API key in Vercel environment variables. See GOOGLE_VISION_SETUP.md for instructions.')
         } else {
-          const errorData = await ocrResponse.json()
-          if (errorData.requiresSetup) {
-            console.log('Google Vision not configured, falling back to Tesseract')
-            throw new Error('Google Vision not configured')
-          } else {
-            throw new Error(errorData.error || 'OCR API failed')
-          }
-        }
-      } catch (apiError: any) {
-        // Fallback to Tesseract.js if Google Vision is not available
-        console.log('Falling back to Tesseract.js:', apiError.message)
-        const tesseract = await import('tesseract.js')
-        const worker = await tesseract.createWorker('eng')
-        
-        // Convert File/Blob to data URL for Tesseract
-        let imageDataUrl: string
-        if (typeof imageFile === 'string') {
-          imageDataUrl = imageFile
-        } else {
-          imageDataUrl = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader()
-            reader.onload = () => resolve(reader.result as string)
-            reader.onerror = reject
-            reader.readAsDataURL(imageFile)
-          })
-        }
-        
-        const { data } = await worker.recognize(imageDataUrl)
-        await worker.terminate()
-        
-        ocrText = data.text || ''
-        ocrWords = data.words || []
-        
-        // Extract numbers
-        const numberPattern = /(\d{1,3})/g
-        let match
-        while ((match = numberPattern.exec(ocrText)) !== null) {
-          const num = parseInt(match[1])
-          if (!isNaN(num) && num >= 0 && num <= 300) {
-            allNumbers.push(num)
-          }
+          throw new Error(errorData.error || 'OCR API failed')
         }
       }
+
+      const ocrData = await ocrResponse.json()
+      ocrText = ocrData.text || ''
+      ocrWords = ocrData.words || []
+      
+      // Extract all numbers for manual entry reference
+      const numberPattern = /(\d{1,3})/g
+      let match
+      while ((match = numberPattern.exec(ocrText)) !== null) {
+        const num = parseInt(match[1])
+        if (!isNaN(num) && num >= 0 && num <= 300) {
+          allNumbers.push(num)
+        }
+      }
+      
+      console.log('Google Vision OCR successful')
       
       console.log('OCR detected numbers:', allNumbers)
       console.log('Full OCR text:', ocrText)
@@ -207,233 +179,46 @@ export default function OCRPage() {
   }
 
   const parseBowlingScores = (text: string, words: any[]): DetectedBowler[] => {
-    let bowlers: DetectedBowler[] = []
+    const bowlers: DetectedBowler[] = []
     
-    // Strategy 1: Extract ALL numbers from text first (works even with messy OCR)
-    const allNumbers: number[] = []
-    const numberPattern = /(\d{1,3})/g
-    let match
-    
-    while ((match = numberPattern.exec(text)) !== null) {
-      const num = parseInt(match[1])
-      if (!isNaN(num) && num >= 0 && num <= 300) {
-        allNumbers.push(num)
-      }
-    }
-    
-    console.log('Extracted numbers from text:', allNumbers)
-    
-    // Strategy 2: Look for rows with 10-12 numbers in sequence (frames + total)
-    // Prefer rows that start with text (names), but don't require it
-    
-    if (words && words.length > 0) {
-      // Group words by Y position (rows)
-      const rows: any[][] = []
-      const yTolerance = 20 // pixels - words on same row (increased tolerance)
-      
-      words.forEach(word => {
-        const wordY = word.bbox.y0
-        let foundRow = false
-        for (const row of rows) {
-          if (row.length > 0) {
-            const rowY = row[0].bbox.y0
-            if (Math.abs(wordY - rowY) < yTolerance) {
-              row.push(word)
-              foundRow = true
-              break
-            }
-          }
-        }
-        if (!foundRow) {
-          rows.push([word])
-        }
-      })
-      
-      // Sort each row by X position (left to right)
-      rows.forEach(row => {
-        row.sort((a, b) => a.bbox.x0 - b.bbox.x0)
-      })
-      
-      // Sort rows by Y position (top to bottom)
-      rows.sort((a, b) => {
-        if (a.length === 0 || b.length === 0) return 0
-        return a[0].bbox.y0 - b[0].bbox.y0
-      })
-      
-      // Look for rows with 10-12 numbers (frames + total)
-      const candidateRows: any[][] = []
-      
-      rows.forEach(row => {
-        // Count numbers in row
-        let numberCount = 0
-        row.forEach(word => {
-          const text = word.text.trim()
-          const num = parseInt(text.replace(/[^\d]/g, ''))
-          if (!isNaN(num) && num >= 0 && num <= 300) {
-            numberCount++
-          }
-        })
-        
-        // Row should have 10-12 numbers (frames + total)
-        if (numberCount >= 10 && numberCount <= 15) {
-          candidateRows.push(row)
-        }
-      })
-      
-      // Process candidate rows (limit to max 3 bowlers)
-      candidateRows.slice(0, 5).forEach(row => {
-        // Extract numbers from the row
-        const numbers: number[] = []
-        let hasTextStart = false
-        
-        // Check first few words for text (names)
-        for (let i = 0; i < Math.min(3, row.length); i++) {
-          const text = row[i].text.trim()
-          if (!/^\d+$/.test(text) && text.length > 1) {
-            hasTextStart = true
-            break
-          }
-        }
-        
-        // Extract all numbers from the row
-        row.forEach(word => {
-          const text = word.text.trim()
-          const num = parseInt(text.replace(/[^\d]/g, ''))
-          if (!isNaN(num) && num >= 0 && num <= 300) {
-            numbers.push(num)
-          }
-        })
-        
-        if (numbers.length >= 10) {
-          // Take first 10 as frame scores
-          // If there are 11+, the last one is likely the total
-          const frames = numbers.slice(0, 10)
-          const total = numbers.length >= 11 ? numbers[numbers.length - 1] : null
-          
-          // Validate: frame scores should be cumulative (monotonically increasing)
-          const isCumulative = frames.every((f, i) => i === 0 || f >= frames[i - 1])
-          const hasValidRange = frames.every(f => f >= 0 && f <= 300)
-          const finalScoreReasonable = !total || (total >= frames[9] && total <= 300)
-          
-          // Very lenient validation - accept if numbers are in valid range
-          // Don't require cumulative - sometimes OCR misreads order
-          if (hasValidRange) {
-            // Avoid exact duplicates
-            const isDuplicate = bowlers.some(b => 
-              b.frameScores.length === frames.length &&
-              b.frameScores.every((f, i) => f === frames[i]) &&
-              b.totalScore === total
-            )
-            
-            if (!isDuplicate) {
-              bowlers.push({
-                frameScores: frames,
-                totalScore: total,
-                confidence: isCumulative && hasTextStart ? 0.85 : isCumulative ? 0.75 : 0.65,
-              })
-            }
-          }
-        }
-      })
-      
-      // Sort by confidence and take top 3
-      bowlers.sort((a, b) => b.confidence - a.confidence)
-    }
-    
-    // Fallback: Use extracted numbers to find sequences
-    if (bowlers.length === 0 && allNumbers.length >= 10) {
-      console.log('Trying fallback parsing with', allNumbers.length, 'numbers')
-      
-      // Try to find sequences of 10 numbers that could be frame scores
-      // Look for sequences where numbers are in reasonable ranges
-      for (let start = 0; start <= allNumbers.length - 10; start++) {
-        const candidateFrames = allNumbers.slice(start, start + 10)
-        const candidateTotal = start + 10 < allNumbers.length ? allNumbers[start + 10] : null
-        
-        // Ultra lenient validation - just check range (0-300)
-        // Accept any sequence - user can edit if wrong
-        const hasValidRange = candidateFrames.every(f => f >= 0 && f <= 300)
-        
-        if (hasValidRange) {
-          // Check if cumulative (much higher confidence)
-          const isCumulative = candidateFrames.every((f, i) => i === 0 || f >= candidateFrames[i - 1])
-          
-          // Additional validation: Check if final score is reasonable (should be >= last frame)
-          const finalScoreValid = !candidateTotal || candidateTotal >= candidateFrames[9]
-          
-          // Filter out sequences that are clearly wrong:
-          // - If not cumulative and final score doesn't make sense, skip it
-          if (!isCumulative && !finalScoreValid) {
-            continue
-          }
-          
-          // Avoid duplicates
-          const isDuplicate = bowlers.some(b => 
-            b.frameScores.length === candidateFrames.length &&
-            b.frameScores.every((f, i) => f === candidateFrames[i]) &&
-            b.totalScore === candidateTotal
-          )
-          
-          if (!isDuplicate) {
-            // Calculate confidence based on how "bowling-like" the sequence is
-            let confidence = 0.3
-            if (isCumulative) confidence += 0.4
-            if (finalScoreValid) confidence += 0.2
-            // Prefer sequences where numbers increase more smoothly
-            const smoothIncrease = candidateFrames.every((f, i) => 
-              i === 0 || f - candidateFrames[i - 1] >= 0 && f - candidateFrames[i - 1] <= 30
-            )
-            if (smoothIncrease) confidence += 0.1
-            
-            bowlers.push({
-              frameScores: candidateFrames,
-              totalScore: candidateTotal,
-              confidence: Math.min(confidence, 1.0),
-            })
-            console.log('Found candidate sequence:', candidateFrames, candidateTotal, 'confidence:', confidence.toFixed(2))
-          }
-        }
-      }
-    }
-    
-    // Also try text-based line parsing (more reliable for Google Vision)
     // Look for pairs of lines: individual balls (top) + cumulative totals (bottom)
+    // This is the most reliable pattern for bowling score sheets
     const lines = text.split('\n').filter(line => line.trim().length > 0)
     
     // First, identify lines with exactly 10 cumulative scores (bottom rows)
     const cumulativeScoreLines: Array<{ lineIndex: number; scores: number[]; line: string }> = []
     
     lines.forEach((line, lineIndex) => {
-        // Extract all numbers from the line
-        const numbers: number[] = []
-        const numberPattern = /\b(\d{1,3})\b/g
-        let match
-        
-        while ((match = numberPattern.exec(line)) !== null) {
-          const num = parseInt(match[1])
-          if (num >= 0 && num <= 300) {
-            numbers.push(num)
-          }
+      // Extract all numbers from the line
+      const numbers: number[] = []
+      const numberPattern = /\b(\d{1,3})\b/g
+      let match
+      
+      while ((match = numberPattern.exec(line)) !== null) {
+        const num = parseInt(match[1])
+        if (num >= 0 && num <= 300) {
+          numbers.push(num)
         }
+      }
+      
+      // If we found exactly 10 numbers that are cumulative (increasing or mostly increasing), this is likely the cumulative totals row
+      if (numbers.length === 10) {
+        const isCumulative = numbers.every((f, i) => i === 0 || f >= numbers[i - 1])
+        // Also allow for small decreases (OCR errors)
+        const mostlyCumulative = numbers.filter((f, i) => i === 0 || f >= numbers[i - 1] - 5).length >= 8
         
-        // If we found exactly 10 numbers that are cumulative (increasing or mostly increasing), this is likely the cumulative totals row
-        if (numbers.length === 10) {
-          const isCumulative = numbers.every((f, i) => i === 0 || f >= numbers[i - 1])
-          // Also allow for small decreases (OCR errors)
-          const mostlyCumulative = numbers.filter((f, i) => i === 0 || f >= numbers[i - 1] - 5).length >= 8
-          
-          if (isCumulative || mostlyCumulative) {
-            cumulativeScoreLines.push({
-              lineIndex,
-              scores: numbers,
-              line: line.trim()
-            })
-          }
+        if (isCumulative || mostlyCumulative) {
+          cumulativeScoreLines.push({
+            lineIndex,
+            scores: numbers,
+            line: line.trim()
+          })
         }
-      })
+      }
+    })
     
     // For each cumulative score line, look for the individual ball results row above it
-    cumulativeScoreLines.forEach(({ lineIndex, scores, line }) => {
+    cumulativeScoreLines.forEach(({ lineIndex, scores }) => {
       // Try to find bowler name from previous lines (before the ball results row)
       let bowlerName: string | undefined = undefined
       for (let i = lineIndex - 1; i >= Math.max(0, lineIndex - 5); i--) {
@@ -452,7 +237,7 @@ export default function OCRPage() {
       const ballResultsLine = lineIndex > 0 ? lines[lineIndex - 1].trim() : null
       
       // Parse individual ball results if available
-      let individualBalls: Array<{ first: number | 'X' | null; second: number | '/' | null }> = []
+      let individualBalls: Array<{ first: number | 'X' | null; second: number | '/' | null; third?: number | 'X' | '/' | null }> = []
       
       if (ballResultsLine) {
         // Extract tokens: X for strikes, / for spares, numbers for pins
@@ -519,137 +304,6 @@ export default function OCRPage() {
       }
     })
     
-    // Fallback: If we didn't find any cumulative score lines, try the old method
-    if (cumulativeScoreLines.length === 0) {
-      lines.forEach((line, lineIndex) => {
-        const numbers: number[] = []
-        const numberPattern = /\b(\d{1,3})\b/g
-        let match
-        
-        while ((match = numberPattern.exec(line)) !== null) {
-          const num = parseInt(match[1])
-          if (num >= 0 && num <= 300) {
-            numbers.push(num)
-          }
-        }
-        
-        if (numbers.length >= 10) {
-          // If more than 10 numbers, try to extract the best 10-number sequence
-          for (let start = 0; start <= numbers.length - 10; start++) {
-            const frames = numbers.slice(start, start + 10)
-            const total = start + 10 < numbers.length ? numbers[start + 10] : null
-            
-            // Check range
-            const hasValidRange = frames.every(f => f >= 0 && f <= 300)
-            
-            if (hasValidRange) {
-              const isCumulative = frames.every((f, i) => i === 0 || f >= frames[i - 1])
-              const finalScoreValid = !total || total >= frames[9]
-              
-              // Avoid duplicates
-              const isDuplicate = bowlers.some(b => 
-                b.frameScores.length === frames.length &&
-                b.frameScores.every((f, i) => f === frames[i]) &&
-                b.totalScore === total
-              )
-              
-              if (!isDuplicate && (isCumulative || finalScoreValid)) {
-                // Try to find bowler name
-                let bowlerName: string | undefined = undefined
-                for (let i = lineIndex - 1; i >= Math.max(0, lineIndex - 3); i--) {
-                  const prevLine = lines[i].trim()
-                  if (/^[A-Z][A-Z\s]+$/i.test(prevLine) && prevLine.length > 2 && prevLine.length < 30) {
-                    bowlerName = prevLine.split(/\s+/)[0]
-                    break
-                  }
-                }
-                
-                const confidence = isCumulative ? 0.85 : 0.6
-                bowlers.push({
-                  name: bowlerName,
-                  frameScores: frames,
-                  totalScore: total,
-                  confidence: confidence,
-                })
-                console.log(`Found bowler from line parsing: ${bowlerName || 'Unknown'}, frames:`, frames, 'confidence:', confidence)
-                break // Take first valid sequence from this line
-              }
-            }
-          }
-        }
-      })
-    }
-    
-    // Sort by confidence, prefer cumulative sequences and named bowlers
-    bowlers.sort((a, b) => {
-        if (b.confidence !== a.confidence) return b.confidence - a.confidence
-        // If confidence is same, prefer named bowlers
-        if (b.name && !a.name) return 1
-        if (a.name && !b.name) return -1
-        return 0
-      })
-      
-    // Filter to only keep high-confidence sequences (>= 0.6) or top 2 if none are high confidence
-    const highConfidence = bowlers.filter(b => b.confidence >= 0.6)
-    if (highConfidence.length >= 2) {
-      bowlers = highConfidence.slice(0, 2)
-    } else if (highConfidence.length === 1) {
-      // Take the high confidence one plus the next best
-      bowlers = [highConfidence[0], ...bowlers.filter(b => b.confidence < 0.6).slice(0, 1)].filter(Boolean)
-    } else {
-      // Take top 2 by confidence even if low
-      bowlers = bowlers.slice(0, 2)
-    }
-
-    // Try to extract names for detected bowlers using word positions
-    if (words && words.length > 0 && bowlers.length > 0) {
-      // Group words by Y position again to find rows with names
-      const rows: any[][] = []
-      const yTolerance = 25 // Increased for tilted images
-      
-      words.forEach(word => {
-        const wordY = word.bbox.y0
-        let foundRow = false
-        for (const row of rows) {
-          if (row.length > 0) {
-            const rowY = row[0].bbox.y0
-            if (Math.abs(wordY - rowY) < yTolerance) {
-              row.push(word)
-              foundRow = true
-              break
-            }
-          }
-        }
-        if (!foundRow) {
-          rows.push([word])
-        }
-      })
-      
-      rows.forEach(row => row.sort((a, b) => a.bbox.x0 - b.bbox.x0))
-      rows.sort((a, b) => (a[0]?.bbox.y0 || 0) - (b[0]?.bbox.y0 || 0))
-      
-      // Try to match bowlers to rows and extract names
-      // For now, just take first 2 rows as potential names
-      rows.slice(0, 2).forEach((row, index) => {
-        if (bowlers[index]) {
-          // Look for text words (not numbers) at the start of the row
-          const nameWords: string[] = []
-          for (let i = 0; i < Math.min(3, row.length); i++) {
-            const text = row[i].text.trim()
-            // Skip if it's just a number
-            if (!/^\d+$/.test(text) && text.length > 1) {
-              nameWords.push(text)
-            } else {
-              break // Stop at first number
-            }
-          }
-          if (nameWords.length > 0) {
-            bowlers[index].name = nameWords.join(' ')
-          }
-        }
-      })
-    }
-
     console.log('Final bowlers detected:', bowlers.length, bowlers.map(b => ({ name: b.name, frames: b.frameScores, total: b.totalScore, conf: b.confidence.toFixed(2) })))
     return bowlers.slice(0, 2) // Limit to 2 bowlers max
   }
