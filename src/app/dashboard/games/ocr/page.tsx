@@ -28,12 +28,7 @@ export default function OCRPage() {
   const [detectedBowlers, setDetectedBowlers] = useState<DetectedBowler[]>([])
   const [selectedBowlerIndex, setSelectedBowlerIndex] = useState<number | null>(null)
   const [extractedFrames, setExtractedFrames] = useState<Frame[] | null>(null)
-  const [detectedNumbers, setDetectedNumbers] = useState<number[]>([])
-  const [showManualEntry, setShowManualEntry] = useState(false)
-  const [detectedText, setDetectedText] = useState<string | null>(null)
-  const [manualFrameScores, setManualFrameScores] = useState<(number | null)[]>([null, null, null, null, null, null, null, null, null, null])
-  const [manualTotal, setManualTotal] = useState<number | null>(null)
-  const [editingFrames, setEditingFrames] = useState(false)
+  const [editingFrames, setEditingFrames] = useState(true) // Start with editing enabled
   const [gameState, setGameState] = useState<GameState | null>(null)
   const [currentFrame, setCurrentFrame] = useState(0)
   const [maxScore, setMaxScore] = useState(300)
@@ -105,10 +100,9 @@ export default function OCRPage() {
   const processImage = async (imageFile: File | Blob) => {
     setProcessing(true)
     setError(null)
-    setDetectedBowlers([])
-    setSelectedBowlerIndex(null)
-    setExtractedFrames(null)
-    setDetectedText(null)
+      setDetectedBowlers([])
+      setSelectedBowlerIndex(null)
+      setExtractedFrames(null)
 
     try {
       let ocrText = ''
@@ -145,31 +139,16 @@ export default function OCRPage() {
       ocrText = ocrData.text || ''
       ocrWords = ocrData.words || []
       
-      // Extract all numbers for manual entry reference
-      const numberPattern = /(\d{1,3})/g
-      let match
-      while ((match = numberPattern.exec(ocrText)) !== null) {
-        const num = parseInt(match[1])
-        if (!isNaN(num) && num >= 0 && num <= 300) {
-          allNumbers.push(num)
-        }
-      }
-      
       console.log('Google Vision OCR successful')
       
-      console.log('OCR detected numbers:', allNumbers)
-      console.log('Full OCR text:', ocrText)
-      setDetectedText(ocrText)
-      
-      // Always show manual entry - use OCR numbers as reference only
-      setDetectedNumbers(allNumbers)
-      setShowManualEntry(true)
-      
-      // Optionally try automatic parsing as a helper (non-blocking)
+      // Parse bowling scores from OCR text
       const bowlers = parseBowlingScores(ocrText, ocrWords)
       if (bowlers.length > 0) {
         setDetectedBowlers(bowlers)
-        console.log('Auto-detected bowlers (optional):', bowlers)
+        console.log('Auto-detected bowlers:', bowlers)
+      } else {
+        // If no bowlers detected, show an error
+        setError('No bowling scores detected. Please ensure the image clearly shows the score sheet with frame scores.')
       }
     } catch (err: any) {
       setError(`OCR processing failed: ${err.message}. Please try manual entry.`)
@@ -666,14 +645,11 @@ export default function OCRPage() {
             />
             <button
               onClick={() => {
-                setImagePreview(null)
-                setDetectedBowlers([])
-                setSelectedBowlerIndex(null)
-                setExtractedFrames(null)
-                setDetectedNumbers([])
-                setShowManualEntry(false)
-                setManualFrameScores([null, null, null, null, null, null, null, null, null, null])
-                setManualTotal(null)
+                  setImagePreview(null)
+                  setDetectedBowlers([])
+                  setSelectedBowlerIndex(null)
+                  setExtractedFrames(null)
+                  setEditingFrames(true)
               }}
               className="w-full bg-gray-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-gray-700"
             >
@@ -690,116 +666,11 @@ export default function OCRPage() {
         </div>
       )}
 
-      {/* Manual Entry - Primary Method */}
-      {showManualEntry && !processing && imagePreview && (
-        <div className="bg-white shadow rounded-lg p-6 mb-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">
-            Enter Frame Scores (Cumulative)
-          </h2>
-          {detectedNumbers.length > 0 && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-              <p className="text-sm font-medium text-blue-900 mb-2">
-                OCR Detected Numbers (for reference):
-              </p>
-              <p className="text-sm text-blue-700 break-words">
-                {detectedNumbers.slice(0, 30).join(', ')}{detectedNumbers.length > 30 ? ` ... (${detectedNumbers.length - 30} more)` : ''}
-              </p>
-            </div>
-          )}
-          <p className="text-sm text-gray-600 mb-4">
-            Enter the cumulative score after each frame (the running total shown on the scoreboard).
-          </p>
-          
-          <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-3 mb-4">
-            {manualFrameScores.map((score, index) => (
-              <div key={index} className="space-y-1">
-                <label className="block text-xs text-gray-600">Frame {index + 1}</label>
-                <input
-                  type="number"
-                  min="0"
-                  max="300"
-                  value={score ?? ''}
-                  onChange={(e) => {
-                    const value = e.target.value === '' ? null : parseInt(e.target.value)
-                    setManualFrameScores(prev => {
-                      const newScores = [...prev]
-                      newScores[index] = value
-                      return newScores
-                    })
-                  }}
-                  placeholder="-"
-                  className="w-full px-2 py-2 border border-gray-300 rounded text-black text-center font-semibold focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                />
-              </div>
-            ))}
-          </div>
-          
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Total Score (Optional)
-            </label>
-            <input
-              type="number"
-              min="0"
-              max="300"
-              value={manualTotal ?? ''}
-              onChange={(e) => setManualTotal(e.target.value === '' ? null : parseInt(e.target.value))}
-              placeholder="Enter total"
-              className="w-full px-3 py-2 border border-gray-300 rounded text-black focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-            />
-          </div>
-          
-          <div className="flex gap-3">
-            <button
-              onClick={() => {
-                // Convert manual entry to bowler format
-                const frames = manualFrameScores.filter(s => s !== null && s !== undefined) as number[]
-                const validFrames = frames.length >= 10 ? frames.slice(0, 10) : []
-                
-                // Fill missing frames with null
-                while (validFrames.length < 10) {
-                  validFrames.push(null as any)
-                }
-                
-                if (frames.length >= 10) {
-                  const bowler: DetectedBowler = {
-                    frameScores: validFrames,
-                    totalScore: manualTotal,
-                    confidence: 1.0,
-                  }
-                  setDetectedBowlers([bowler])
-                  setSelectedBowlerIndex(0)
-                  extractFramesFromBowler(bowler)
-                  setShowManualEntry(false)
-                  setError(null)
-                } else {
-                  setError(`Please enter at least 10 frame scores. Currently entered: ${frames.length}`)
-                }
-              }}
-              className="flex-1 bg-indigo-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-indigo-700"
-            >
-              Continue with These Scores
-            </button>
-            {detectedBowlers.length > 0 && (
-              <button
-                onClick={() => {
-                  setShowManualEntry(false)
-                  setError(null)
-                }}
-                className="px-4 py-3 border border-gray-300 rounded-lg text-gray-700 bg-white hover:bg-gray-50"
-              >
-                Try Auto-Detected
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* Bowler Selection */}
-      {detectedBowlers.length > 0 && !showManualEntry && (
+      {detectedBowlers.length > 0 && (
         <div className="bg-white shadow rounded-lg p-6 mb-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">
-            Select Your Score ({detectedBowlers.length} {detectedBowlers.length === 1 ? 'bowler' : 'bowlers'} detected)
+            Select Your Name ({detectedBowlers.length} {detectedBowlers.length === 1 ? 'bowler' : 'bowlers'} detected)
           </h2>
           <div className="space-y-3">
             {detectedBowlers.map((bowler, index) => (
@@ -817,17 +688,6 @@ export default function OCRPage() {
                     <div className="font-semibold text-gray-900">
                       {bowler.name || `Bowler ${index + 1}`}
                     </div>
-                    <div className="text-sm text-gray-600 mt-1">
-                      Frames: {bowler.frameScores.filter(f => f !== null).length}/10
-                    </div>
-                    {bowler.totalScore && (
-                      <div className="text-lg font-bold text-indigo-600 mt-2">
-                        Total: {bowler.totalScore}
-                      </div>
-                    )}
-                  </div>
-                  <div className="text-xs text-gray-500">
-                    Confidence: {Math.round(bowler.confidence * 100)}%
                   </div>
                 </div>
               </button>
@@ -839,17 +699,9 @@ export default function OCRPage() {
       {/* Extracted Score Display and Edit */}
       {selectedBowlerIndex !== null && extractedFrames && gameState && (
         <div className="bg-white shadow rounded-lg p-6 mb-6">
-          <div className="flex justify-between items-center mb-4">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900">Detected Score</h2>
-              <p className="text-sm text-gray-500">Review and edit if needed</p>
-            </div>
-            <button
-              onClick={() => setEditingFrames(!editingFrames)}
-              className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-            >
-              {editingFrames ? 'Done Editing' : 'Edit Frames'}
-            </button>
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">Frame-by-Frame Score</h2>
+            <p className="text-sm text-gray-500">Review and edit individual frames as needed</p>
           </div>
 
           {/* Current Score Display */}
@@ -866,8 +718,8 @@ export default function OCRPage() {
             </div>
           </div>
 
-          {/* Frames Grid */}
-          {editingFrames ? (
+          {/* Frames Grid - Always editable */}
+          {editingFrames && (
             <div className="bg-gray-50 rounded-lg p-4 sm:p-6 mb-6">
               <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-2 sm:gap-4">
                 {extractedFrames.map((frame, frameIndex) => {
@@ -1015,19 +867,6 @@ export default function OCRPage() {
                     </div>
                   )
                 })}
-              </div>
-            </div>
-          ) : (
-            <div className="bg-gray-50 rounded-lg p-4">
-              <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-2">
-                {gameState.map((frame, index) => (
-                  <div key={index} className="border border-gray-300 rounded-lg p-2 text-center">
-                    <div className="text-xs text-gray-600 mb-1">Frame {index + 1}</div>
-                    <div className="text-lg font-bold text-gray-900">
-                      {frame.score !== null ? frame.score : '-'}
-                    </div>
-                  </div>
-                ))}
               </div>
             </div>
           )}
