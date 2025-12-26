@@ -291,13 +291,14 @@ export default function FrameByFramePage() {
                       value={frame.firstRoll ?? ''}
                       onChange={(e) => handleRollChange(frameIndex, 1, e.target.value)}
                       className={`flex-1 text-center text-black font-bold text-base sm:text-lg px-1 sm:px-2 py-1.5 sm:py-2 border rounded ${
-                        frame.isStrike
+                        frame.firstRoll === 10
                           ? 'bg-indigo-100 border-indigo-300'
                           : 'border-gray-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500'
                       }`}
                       placeholder="1"
                     />
-                    {!frame.isStrike && (
+                    {/* Show second input unless first roll is a strike (10 pins) */}
+                    {frame.firstRoll !== 10 && (
                       <input
                         type="number"
                         min="0"
@@ -313,7 +314,8 @@ export default function FrameByFramePage() {
                         placeholder="2"
                       />
                     )}
-                    {frame.isStrike && (
+                    {/* Show X indicator when first roll is a strike */}
+                    {frame.firstRoll === 10 && (
                       <div className="flex-1 flex items-center justify-center bg-indigo-100 border border-indigo-300 rounded font-bold text-indigo-700 text-base sm:text-lg py-1.5 sm:py-2">
                         X
                       </div>
