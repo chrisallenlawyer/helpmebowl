@@ -222,13 +222,76 @@ export default function OCRPage() {
         
         // More flexible token extraction - handle various formats
         // Match: X (strike), numbers, / (spare), - (miss/gutter)
-        // Examples: "X 9/ 8- X 7/ 9-" or "X9/8-X7/9-" or "X  9/  8-  X"
-        const tokenPattern = /([Xx]|\d+|[/-]|[0-9]+[\/-]?)/g
-        const matches = ballResultsLine.match(tokenPattern)
+        // Examples: "X 9/ 8- X 7/ 9-" or "X9/8-X7/9-" or "X  9/  8-  X" or "X818119"
+        let tokens: string[] = []
         
-        if (matches) {
-          const tokens = matches.map(m => m.trim().toUpperCase()).filter(t => t.length > 0)
-          console.log(`Extracted tokens:`, tokens)
+        // First, try to split by common separators (spaces, slashes, dashes)
+        let workingLine = ballResultsLine.trim().toUpperCase()
+        
+        // Replace common patterns first: handle spares like "9/" or "7/"
+        workingLine = workingLine.replace(/(\d+)\//g, ' $1/ ')
+        
+        // Split by whitespace and filter empty
+        let initialTokens = workingLine.split(/\s+/).filter(t => t.length > 0)
+        
+        // Now process each token - if it contains concatenated digits, try to split intelligently
+        for (const token of initialTokens) {
+          if (token === 'X' || token === '/' || token === '-' || token === '—') {
+            tokens.push(token)
+          } else if (token.includes('/')) {
+            // Spare pattern like "9/" or "81/" - extract the number and the slash
+            const spareMatch = token.match(/^(\d+)\/$/)
+            if (spareMatch) {
+              tokens.push(spareMatch[1])
+              tokens.push('/')
+            } else {
+              tokens.push(token)
+            }
+          } else if (/^\d+$/.test(token)) {
+            // It's all digits - need to split intelligently
+            // For bowling, we need pairs: first ball (0-10), second ball (0-10)
+            // But if we see a number > 10, it might be two numbers concatenated
+            const num = parseInt(token)
+            if (num <= 10) {
+              // Single digit, push as is
+              tokens.push(token)
+            } else {
+              // Multiple digits concatenated - try to split intelligently
+              // Strategy: read digits from left to right, trying to make valid bowling scores
+              const digits = token.split('')
+              let i = 0
+              while (i < digits.length) {
+                if (i + 1 < digits.length) {
+                  // Try two digits first
+                  const twoDigit = parseInt(digits[i] + digits[i + 1])
+                  if (twoDigit <= 10) {
+                    tokens.push(digits[i] + digits[i + 1])
+                    i += 2
+                  } else {
+                    // Two digits would be > 10, so take single digit
+                    tokens.push(digits[i])
+                    i += 1
+                  }
+                } else {
+                  // Last digit
+                  tokens.push(digits[i])
+                  i += 1
+                }
+              }
+            }
+          } else {
+            // Try to extract X, digits, /, - from mixed token
+            const mixedPattern = /([Xx]|\d+|[/-])/g
+            const mixedMatches = token.match(mixedPattern)
+            if (mixedMatches) {
+              tokens.push(...mixedMatches.map(m => m.toUpperCase()))
+            } else {
+              tokens.push(token)
+            }
+          }
+        }
+        
+        console.log(`Extracted tokens:`, tokens)
           
           // Try to match tokens to frames
           let tokenIndex = 0
