@@ -399,11 +399,11 @@ export default function OCRPage() {
     // Also try text-based line parsing (more reliable for Google Vision)
     // Look for pairs of lines: individual balls (top) + cumulative totals (bottom)
     const lines = text.split('\n').filter(line => line.trim().length > 0)
-      
-      // First, identify lines with exactly 10 cumulative scores (bottom rows)
-      const cumulativeScoreLines: Array<{ lineIndex: number; scores: number[]; line: string }> = []
-      
-      lines.forEach((line, lineIndex) => {
+    
+    // First, identify lines with exactly 10 cumulative scores (bottom rows)
+    const cumulativeScoreLines: Array<{ lineIndex: number; scores: number[]; line: string }> = []
+    
+    lines.forEach((line, lineIndex) => {
         // Extract all numbers from the line
         const numbers: number[] = []
         const numberPattern = /\b(\d{1,3})\b/g
@@ -431,157 +431,157 @@ export default function OCRPage() {
           }
         }
       })
-      
-      // For each cumulative score line, look for the individual ball results row above it
-      cumulativeScoreLines.forEach(({ lineIndex, scores, line }) => {
-        // Try to find bowler name from previous lines (before the ball results row)
-        let bowlerName: string | undefined = undefined
-        for (let i = lineIndex - 1; i >= Math.max(0, lineIndex - 5); i--) {
-          const prevLine = lines[i].trim()
-          // Look for lines that look like names (letters, maybe some numbers for lane/pin)
-          if (/^[A-Z][A-Z\s]+$/i.test(prevLine.replace(/[^A-Z\s]/gi, '')) && prevLine.replace(/[^A-Z]/gi, '').length > 2 && prevLine.length < 30) {
-            bowlerName = prevLine.split(/\s+/)[0].replace(/[^A-Z]/gi, '') // Take first word as name
-            if (bowlerName && bowlerName.length > 1) {
-              break
-            }
+    
+    // For each cumulative score line, look for the individual ball results row above it
+    cumulativeScoreLines.forEach(({ lineIndex, scores, line }) => {
+      // Try to find bowler name from previous lines (before the ball results row)
+      let bowlerName: string | undefined = undefined
+      for (let i = lineIndex - 1; i >= Math.max(0, lineIndex - 5); i--) {
+        const prevLine = lines[i].trim()
+        // Look for lines that look like names (letters, maybe some numbers for lane/pin)
+        if (/^[A-Z][A-Z\s]+$/i.test(prevLine.replace(/[^A-Z\s]/gi, '')) && prevLine.replace(/[^A-Z]/gi, '').length > 2 && prevLine.length < 30) {
+          bowlerName = prevLine.split(/\s+/)[0].replace(/[^A-Z]/gi, '') // Take first word as name
+          if (bowlerName && bowlerName.length > 1) {
+            break
           }
         }
+      }
+      
+      // Look for the individual ball results row (the line immediately before cumulative totals)
+      // This should contain X, /, and numbers representing individual balls
+      const ballResultsLine = lineIndex > 0 ? lines[lineIndex - 1].trim() : null
+      
+      // Parse individual ball results if available
+      let individualBalls: Array<{ first: number | 'X' | null; second: number | '/' | null }> = []
+      
+      if (ballResultsLine) {
+        // Extract tokens: X for strikes, / for spares, numbers for pins
+        const tokens = ballResultsLine.split(/\s+/).filter(t => t.trim().length > 0)
         
-        // Look for the individual ball results row (the line immediately before cumulative totals)
-        // This should contain X, /, and numbers representing individual balls
-        const ballResultsLine = lineIndex > 0 ? lines[lineIndex - 1].trim() : null
-        
-        // Parse individual ball results if available
-        let individualBalls: Array<{ first: number | 'X' | null; second: number | '/' | null }> = []
-        
-        if (ballResultsLine) {
-          // Extract tokens: X for strikes, / for spares, numbers for pins
-          const tokens = ballResultsLine.split(/\s+/).filter(t => t.trim().length > 0)
+        // Try to match tokens to frames
+        let tokenIndex = 0
+        for (let frame = 0; frame < 10 && tokenIndex < tokens.length; frame++) {
+          const token = tokens[tokenIndex].toUpperCase()
           
-          // Try to match tokens to frames
-          let tokenIndex = 0
-          for (let frame = 0; frame < 10 && tokenIndex < tokens.length; frame++) {
-            const token = tokens[tokenIndex].toUpperCase()
-            
-            if (token === 'X' || token === 'x') {
-              // Strike
-              individualBalls.push({ first: 'X', second: null })
+          if (token === 'X' || token === 'x') {
+            // Strike
+            individualBalls.push({ first: 'X', second: null })
+            tokenIndex++
+          } else {
+            // First ball
+            const firstNum = parseInt(token.replace(/[^\d]/g, ''))
+            if (!isNaN(firstNum) && firstNum >= 0 && firstNum <= 10) {
               tokenIndex++
-            } else {
-              // First ball
-              const firstNum = parseInt(token.replace(/[^\d]/g, ''))
-              if (!isNaN(firstNum) && firstNum >= 0 && firstNum <= 10) {
-                tokenIndex++
-                if (tokenIndex < tokens.length) {
-                  const secondToken = tokens[tokenIndex].toUpperCase()
-                  if (secondToken === '/') {
-                    // Spare
-                    individualBalls.push({ first: firstNum, second: '/' })
+              if (tokenIndex < tokens.length) {
+                const secondToken = tokens[tokenIndex].toUpperCase()
+                if (secondToken === '/') {
+                  // Spare
+                  individualBalls.push({ first: firstNum, second: '/' })
+                  tokenIndex++
+                } else {
+                  const secondNum = parseInt(secondToken.replace(/[^\d]/g, ''))
+                  if (!isNaN(secondNum) && secondNum >= 0 && secondNum <= 10) {
+                    // Open frame
+                    individualBalls.push({ first: firstNum, second: secondNum })
                     tokenIndex++
                   } else {
-                    const secondNum = parseInt(secondToken.replace(/[^\d]/g, ''))
-                    if (!isNaN(secondNum) && secondNum >= 0 && secondNum <= 10) {
-                      // Open frame
-                      individualBalls.push({ first: firstNum, second: secondNum })
-                      tokenIndex++
-                    } else {
-                      // Only first ball found
-                      individualBalls.push({ first: firstNum, second: null })
-                    }
+                    // Only first ball found
+                    individualBalls.push({ first: firstNum, second: null })
                   }
-                } else {
-                  individualBalls.push({ first: firstNum, second: null })
                 }
               } else {
-                // Skip invalid token
-                tokenIndex++
-                individualBalls.push({ first: null, second: null })
+                individualBalls.push({ first: firstNum, second: null })
               }
+            } else {
+              // Skip invalid token
+              tokenIndex++
+              individualBalls.push({ first: null, second: null })
             }
           }
         }
+      }
+      
+      // Avoid duplicates
+      const isDuplicate = bowlers.some(b => 
+        b.frameScores.length === scores.length &&
+        b.frameScores.every((f, i) => f === scores[i])
+      )
+      
+      if (!isDuplicate) {
+        bowlers.push({
+          name: bowlerName,
+          frameScores: scores,
+          totalScore: scores[9], // Last cumulative score is the total
+          confidence: 0.95, // Very high confidence for this pattern
+          individualBalls: individualBalls.length > 0 ? individualBalls : undefined, // Store individual balls if found
+        })
+        console.log(`Found bowler: ${bowlerName || 'Unknown'}, cumulative:`, scores, 'individual balls:', individualBalls)
+      }
+    })
+    
+    // Fallback: If we didn't find any cumulative score lines, try the old method
+    if (cumulativeScoreLines.length === 0) {
+      lines.forEach((line, lineIndex) => {
+        const numbers: number[] = []
+        const numberPattern = /\b(\d{1,3})\b/g
+        let match
         
-        // Avoid duplicates
-        const isDuplicate = bowlers.some(b => 
-          b.frameScores.length === scores.length &&
-          b.frameScores.every((f, i) => f === scores[i])
-        )
+        while ((match = numberPattern.exec(line)) !== null) {
+          const num = parseInt(match[1])
+          if (num >= 0 && num <= 300) {
+            numbers.push(num)
+          }
+        }
         
-        if (!isDuplicate) {
-          bowlers.push({
-            name: bowlerName,
-            frameScores: scores,
-            totalScore: scores[9], // Last cumulative score is the total
-            confidence: 0.95, // Very high confidence for this pattern
-            individualBalls: individualBalls.length > 0 ? individualBalls : undefined, // Store individual balls if found
-          })
-          console.log(`Found bowler: ${bowlerName || 'Unknown'}, cumulative:`, scores, 'individual balls:', individualBalls)
+        if (numbers.length >= 10) {
+          // If more than 10 numbers, try to extract the best 10-number sequence
+          for (let start = 0; start <= numbers.length - 10; start++) {
+            const frames = numbers.slice(start, start + 10)
+            const total = start + 10 < numbers.length ? numbers[start + 10] : null
+            
+            // Check range
+            const hasValidRange = frames.every(f => f >= 0 && f <= 300)
+            
+            if (hasValidRange) {
+              const isCumulative = frames.every((f, i) => i === 0 || f >= frames[i - 1])
+              const finalScoreValid = !total || total >= frames[9]
+              
+              // Avoid duplicates
+              const isDuplicate = bowlers.some(b => 
+                b.frameScores.length === frames.length &&
+                b.frameScores.every((f, i) => f === frames[i]) &&
+                b.totalScore === total
+              )
+              
+              if (!isDuplicate && (isCumulative || finalScoreValid)) {
+                // Try to find bowler name
+                let bowlerName: string | undefined = undefined
+                for (let i = lineIndex - 1; i >= Math.max(0, lineIndex - 3); i--) {
+                  const prevLine = lines[i].trim()
+                  if (/^[A-Z][A-Z\s]+$/i.test(prevLine) && prevLine.length > 2 && prevLine.length < 30) {
+                    bowlerName = prevLine.split(/\s+/)[0]
+                    break
+                  }
+                }
+                
+                const confidence = isCumulative ? 0.85 : 0.6
+                bowlers.push({
+                  name: bowlerName,
+                  frameScores: frames,
+                  totalScore: total,
+                  confidence: confidence,
+                })
+                console.log(`Found bowler from line parsing: ${bowlerName || 'Unknown'}, frames:`, frames, 'confidence:', confidence)
+                break // Take first valid sequence from this line
+              }
+            }
+          }
         }
       })
-      
-      // Fallback: If we didn't find any cumulative score lines, try the old method
-      if (cumulativeScoreLines.length === 0) {
-        lines.forEach((line, lineIndex) => {
-          const numbers: number[] = []
-          const numberPattern = /\b(\d{1,3})\b/g
-          let match
-          
-          while ((match = numberPattern.exec(line)) !== null) {
-            const num = parseInt(match[1])
-            if (num >= 0 && num <= 300) {
-              numbers.push(num)
-            }
-          }
-          
-          if (numbers.length >= 10) {
-            // If more than 10 numbers, try to extract the best 10-number sequence
-            for (let start = 0; start <= numbers.length - 10; start++) {
-              const frames = numbers.slice(start, start + 10)
-              const total = start + 10 < numbers.length ? numbers[start + 10] : null
-              
-              // Check range
-              const hasValidRange = frames.every(f => f >= 0 && f <= 300)
-              
-              if (hasValidRange) {
-                const isCumulative = frames.every((f, i) => i === 0 || f >= frames[i - 1])
-                const finalScoreValid = !total || total >= frames[9]
-                
-                // Avoid duplicates
-                const isDuplicate = bowlers.some(b => 
-                  b.frameScores.length === frames.length &&
-                  b.frameScores.every((f, i) => f === frames[i]) &&
-                  b.totalScore === total
-                )
-                
-                if (!isDuplicate && (isCumulative || finalScoreValid)) {
-                  // Try to find bowler name
-                  let bowlerName: string | undefined = undefined
-                  for (let i = lineIndex - 1; i >= Math.max(0, lineIndex - 3); i--) {
-                    const prevLine = lines[i].trim()
-                    if (/^[A-Z][A-Z\s]+$/i.test(prevLine) && prevLine.length > 2 && prevLine.length < 30) {
-                      bowlerName = prevLine.split(/\s+/)[0]
-                      break
-                    }
-                  }
-                  
-                  const confidence = isCumulative ? 0.85 : 0.6
-                  bowlers.push({
-                    name: bowlerName,
-                    frameScores: frames,
-                    totalScore: total,
-                    confidence: confidence,
-                  })
-                  console.log(`Found bowler from line parsing: ${bowlerName || 'Unknown'}, frames:`, frames, 'confidence:', confidence)
-                  break // Take first valid sequence from this line
-                }
-              }
-            }
-          }
-        })
-      }
+    }
     
     // Sort by confidence, prefer cumulative sequences and named bowlers
-      bowlers.sort((a, b) => {
+    bowlers.sort((a, b) => {
         if (b.confidence !== a.confidence) return b.confidence - a.confidence
         // If confidence is same, prefer named bowlers
         if (b.name && !a.name) return 1
@@ -589,17 +589,16 @@ export default function OCRPage() {
         return 0
       })
       
-      // Filter to only keep high-confidence sequences (>= 0.6) or top 2 if none are high confidence
-      const highConfidence = bowlers.filter(b => b.confidence >= 0.6)
-      if (highConfidence.length >= 2) {
-        bowlers = highConfidence.slice(0, 2)
-      } else if (highConfidence.length === 1) {
-        // Take the high confidence one plus the next best
-        bowlers = [highConfidence[0], ...bowlers.filter(b => b.confidence < 0.6).slice(0, 1)].filter(Boolean)
-      } else {
-        // Take top 2 by confidence even if low
-        bowlers = bowlers.slice(0, 2)
-      }
+    // Filter to only keep high-confidence sequences (>= 0.6) or top 2 if none are high confidence
+    const highConfidence = bowlers.filter(b => b.confidence >= 0.6)
+    if (highConfidence.length >= 2) {
+      bowlers = highConfidence.slice(0, 2)
+    } else if (highConfidence.length === 1) {
+      // Take the high confidence one plus the next best
+      bowlers = [highConfidence[0], ...bowlers.filter(b => b.confidence < 0.6).slice(0, 1)].filter(Boolean)
+    } else {
+      // Take top 2 by confidence even if low
+      bowlers = bowlers.slice(0, 2)
     }
 
     // Try to extract names for detected bowlers using word positions
