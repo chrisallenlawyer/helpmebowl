@@ -535,43 +535,44 @@ export default function OCRPage() {
           if (numbers.length >= 10) {
             // If more than 10 numbers, try to extract the best 10-number sequence
             for (let start = 0; start <= numbers.length - 10; start++) {
-            const frames = numbers.slice(start, start + 10)
-            const total = start + 10 < numbers.length ? numbers[start + 10] : null
-            
-            // Check range
-            const hasValidRange = frames.every(f => f >= 0 && f <= 300)
-            
-            if (hasValidRange) {
-              const isCumulative = frames.every((f, i) => i === 0 || f >= frames[i - 1])
-              const finalScoreValid = !total || total >= frames[9]
+              const frames = numbers.slice(start, start + 10)
+              const total = start + 10 < numbers.length ? numbers[start + 10] : null
               
-              // Avoid duplicates
-              const isDuplicate = bowlers.some(b => 
-                b.frameScores.length === frames.length &&
-                b.frameScores.every((f, i) => f === frames[i]) &&
-                b.totalScore === total
-              )
+              // Check range
+              const hasValidRange = frames.every(f => f >= 0 && f <= 300)
               
-              if (!isDuplicate && (isCumulative || finalScoreValid)) {
-                // Try to find bowler name
-                let bowlerName: string | undefined = undefined
-                for (let i = lineIndex - 1; i >= Math.max(0, lineIndex - 3); i--) {
-                  const prevLine = lines[i].trim()
-                  if (/^[A-Z][A-Z\s]+$/i.test(prevLine) && prevLine.length > 2 && prevLine.length < 30) {
-                    bowlerName = prevLine.split(/\s+/)[0]
-                    break
-                  }
-                }
+              if (hasValidRange) {
+                const isCumulative = frames.every((f, i) => i === 0 || f >= frames[i - 1])
+                const finalScoreValid = !total || total >= frames[9]
                 
-                const confidence = isCumulative ? 0.85 : 0.6
-                bowlers.push({
-                  name: bowlerName,
-                  frameScores: frames,
-                  totalScore: total,
-                  confidence: confidence,
-                })
-                console.log(`Found bowler from line parsing: ${bowlerName || 'Unknown'}, frames:`, frames, 'confidence:', confidence)
-                break // Take first valid sequence from this line
+                // Avoid duplicates
+                const isDuplicate = bowlers.some(b => 
+                  b.frameScores.length === frames.length &&
+                  b.frameScores.every((f, i) => f === frames[i]) &&
+                  b.totalScore === total
+                )
+                
+                if (!isDuplicate && (isCumulative || finalScoreValid)) {
+                  // Try to find bowler name
+                  let bowlerName: string | undefined = undefined
+                  for (let i = lineIndex - 1; i >= Math.max(0, lineIndex - 3); i--) {
+                    const prevLine = lines[i].trim()
+                    if (/^[A-Z][A-Z\s]+$/i.test(prevLine) && prevLine.length > 2 && prevLine.length < 30) {
+                      bowlerName = prevLine.split(/\s+/)[0]
+                      break
+                    }
+                  }
+                  
+                  const confidence = isCumulative ? 0.85 : 0.6
+                  bowlers.push({
+                    name: bowlerName,
+                    frameScores: frames,
+                    totalScore: total,
+                    confidence: confidence,
+                  })
+                  console.log(`Found bowler from line parsing: ${bowlerName || 'Unknown'}, frames:`, frames, 'confidence:', confidence)
+                  break // Take first valid sequence from this line
+                }
               }
             }
           }
