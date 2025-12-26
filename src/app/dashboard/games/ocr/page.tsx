@@ -295,14 +295,19 @@ export default function OCRPage() {
         
         // More flexible token extraction - handle various formats
         // Match: X (strike), numbers, / (spare), - (miss/gutter)
-        // Examples: "X 9/ 8- X 7/ 9-" or "X9/8-X7/9-" or "X  9/  8-  X" or "X818119"
+        // Examples: "X 9/ 8- X 7/ 9-" or "X9/8-X7/9-" or "X  9/  8-  X" or "X818119" or "8/8-8-7/9/8/719-9/ X81"
         let tokens: string[] = []
         
         // First, try to split by common separators (spaces, slashes, dashes)
         let workingLine = ballResultsLine.trim().toUpperCase()
         
         // Replace common patterns first: handle spares like "9/" or "7/"
-        workingLine = workingLine.replace(/(\d+)\//g, ' $1/ ')
+        // Also handle patterns like "8/8-8-7/9/8/719-9/" where numbers and slashes are concatenated
+        // Add spaces around slashes and dashes to help with tokenization
+        workingLine = workingLine.replace(/(\d+)\//g, ' $1/ ') // "8/" becomes " 8/ "
+        workingLine = workingLine.replace(/(\d+)-/g, ' $1- ') // "8-" becomes " 8- "
+        workingLine = workingLine.replace(/X(\d)/g, 'X $1') // "X8" becomes "X 8"
+        workingLine = workingLine.replace(/(\d)X/g, '$1 X') // "8X" becomes "8 X"
         
         // Split by whitespace and filter empty
         let initialTokens = workingLine.split(/\s+/).filter(t => t.length > 0)
