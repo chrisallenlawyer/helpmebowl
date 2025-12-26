@@ -197,14 +197,18 @@ export default function OCRPage() {
     
     // For each cumulative score line, look for the individual ball results row above it
     cumulativeScoreLines.forEach(({ lineIndex, scores }) => {
+      console.log(`Processing cumulative score line at index ${lineIndex}:`, scores)
+      
       // Try to find bowler name from previous lines (before the ball results row)
       let bowlerName: string | undefined = undefined
       for (let i = lineIndex - 1; i >= Math.max(0, lineIndex - 5); i--) {
         const prevLine = lines[i].trim()
+        console.log(`  Checking line ${i} for name: "${prevLine}"`)
         // Look for lines that look like names (letters, maybe some numbers for lane/pin)
         if (/^[A-Z][A-Z\s]+$/i.test(prevLine.replace(/[^A-Z\s]/gi, '')) && prevLine.replace(/[^A-Z]/gi, '').length > 2 && prevLine.length < 30) {
           bowlerName = prevLine.split(/\s+/)[0].replace(/[^A-Z]/gi, '') // Take first word as name
           if (bowlerName && bowlerName.length > 1) {
+            console.log(`  Found bowler name: ${bowlerName}`)
             break
           }
         }
@@ -216,6 +220,7 @@ export default function OCRPage() {
       let ballResultsLine: string | null = null
       for (let i = lineIndex - 1; i >= Math.max(0, lineIndex - 3); i--) {
         const candidateLine = lines[i].trim()
+        console.log(`  Checking line ${i} for ball results: "${candidateLine}"`)
         // Skip lines that are mostly letters (names)
         const letterCount = (candidateLine.match(/[A-Za-z]/g) || []).length
         const digitCount = (candidateLine.match(/\d/g) || []).length
@@ -224,8 +229,13 @@ export default function OCRPage() {
         // If it has bowling characters (X, /, digits) and not mostly letters, it's likely the ball results
         if ((hasStrikeOrSpare || digitCount > 3) && letterCount < candidateLine.length * 0.5) {
           ballResultsLine = candidateLine
+          console.log(`  Found ball results line for ${bowlerName || 'unknown'}: "${ballResultsLine}"`)
           break
         }
+      }
+      
+      if (!ballResultsLine) {
+        console.log(`  No ball results line found for ${bowlerName || 'unknown'}`)
       }
       
       // Parse individual ball results if available
@@ -446,6 +456,7 @@ export default function OCRPage() {
       console.log('Calculated framePoints:', framePoints)
 
       // Work forwards frame by frame, using actual bowling scoring rules
+      // We need to distinguish between strikes and spares by looking ahead
       for (let i = 0; i < 9; i++) {
         const points = framePoints[i]
         
@@ -456,29 +467,53 @@ export default function OCRPage() {
         
         // In bowling, frame points are:
         // - Strike: 10 + next two rolls (10-30 total)
-        // - Spare: 10 + next one roll (10-20 total, but usually 10-19)
+        // - Spare: 10 + next one roll (10-20 total)
         // - Open: sum of two rolls (0-9 total)
         
-        if (points > 10) {
-          // Must be a strike (10 + bonus from next frame)
-          // Bonus can range from 0-20 (next two rolls)
+        if (points >= 20) {
+          // Must be a strike (10 + bonus of at least 10 from next two rolls)
           frames[i].firstRoll = 10
           frames[i].isStrike = true
+        } else if (points > 10 && points < 20) {
+          // Could be strike (10 + bonus from next two rolls) or spare (10 + next one roll)
+          // Look at next frame to help decide
+          const nextFramePoints = i + 1 < 10 ? framePoints[i + 1] : 0
+          const bonus = points - 10
+          
+          // If next frame is open (points < 10), check if bonus matches next frame's first roll
+          // This would indicate a spare (10 + next first roll)
+          // Example: this frame = 18 (spare 10 + next first roll 8), next frame = 8 (8+0 open frame)
+          if (nextFramePoints > 0 && nextFramePoints < 10) {
+            // Next frame is open
+            // Try to estimate what the next frame's first roll might be
+            // For an open frame, first roll is typically > 0 and < 10
+            // If bonus matches a reasonable first roll value, it's likely a spare
+            const estimatedNextFirstRoll = Math.ceil(nextFramePoints * 0.6) // Estimate first roll
+            
+            // If bonus is close to the estimated first roll or matches the open frame total,
+            // it's more likely a spare than a strike
+            if (bonus >= 1 && bonus <= 9 && (Math.abs(bonus - estimatedNextFirstRoll) <= 2 || bonus === nextFramePoints)) {
+              // Likely a spare - bonus matches next frame's first roll
+              // Estimate first roll for this frame (must be < 10 to leave pins for spare)
+              frames[i].firstRoll = bonus // Use bonus as first roll estimate
+              frames[i].secondRoll = 10 - frames[i].firstRoll // Complete the spare
+              frames[i].isSpare = true
+            } else {
+              // More likely a strike with bonus
+              frames[i].firstRoll = 10
+              frames[i].isStrike = true
+            }
+          } else {
+            // Next frame is not open or doesn't exist, default to strike
+            frames[i].firstRoll = 10
+            frames[i].isStrike = true
+          }
         } else if (points === 10) {
           // Could be spare or strike with 0+0 bonus (rare)
-          // Check if next frame helps us decide
-          if (i + 1 < 10 && framePoints[i + 1] > 0) {
-            // Next frame has points, so this is likely a spare
-            // (strike with 0+0 bonus would mean next frame is also strike, less common)
-            frames[i].firstRoll = 5
-            frames[i].secondRoll = 5
-            frames[i].isSpare = true
-          } else {
-            // Default to spare if we can't tell
-            frames[i].firstRoll = 5
-            frames[i].secondRoll = 5
-            frames[i].isSpare = true
-          }
+          // Default to spare (more common)
+          frames[i].firstRoll = 5
+          frames[i].secondRoll = 5
+          frames[i].isSpare = true
         } else if (points < 10 && points > 0) {
           // Open frame - split pins (try to make it reasonable)
           // Prefer first roll to be slightly higher than second for better UX
