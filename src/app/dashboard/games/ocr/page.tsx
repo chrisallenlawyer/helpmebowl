@@ -1287,6 +1287,84 @@ export default function OCRPage() {
                 />
               </div>
               <div className="md:col-span-2">
+                <label htmlFor="ocr-oil_pattern" className="block text-sm font-medium text-gray-700 mb-1">
+                  Oil Pattern
+                </label>
+                <input
+                  type="text"
+                  id="ocr-oil_pattern"
+                  value={formData.oil_pattern}
+                  onChange={(e) => setFormData({ ...formData, oil_pattern: e.target.value })}
+                  placeholder="e.g., House Shot, Sport Shot, THS"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-black"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Balls Used
+                </label>
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newBallName}
+                      onChange={(e) => setNewBallName(e.target.value)}
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          if (newBallName.trim() && !formData.balls_used.includes(newBallName.trim())) {
+                            setFormData({
+                              ...formData,
+                              balls_used: [...formData.balls_used, newBallName.trim()],
+                            })
+                            setNewBallName('')
+                          }
+                        }
+                      }}
+                      placeholder="Enter ball name"
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-black"
+                    />
+                    <button
+                      onClick={() => {
+                        if (newBallName.trim() && !formData.balls_used.includes(newBallName.trim())) {
+                          setFormData({
+                            ...formData,
+                            balls_used: [...formData.balls_used, newBallName.trim()],
+                          })
+                          setNewBallName('')
+                        }
+                      }}
+                      className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                    >
+                      Add
+                    </button>
+                  </div>
+                  {formData.balls_used.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {formData.balls_used.map((ball, index) => (
+                        <span
+                          key={index}
+                          className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium bg-indigo-100 text-indigo-800"
+                        >
+                          {ball}
+                          <button
+                            onClick={() => {
+                              setFormData({
+                                ...formData,
+                                balls_used: formData.balls_used.filter(b => b !== ball),
+                              })
+                            }}
+                            className="text-indigo-600 hover:text-indigo-900"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="md:col-span-2">
                 <label htmlFor="ocr-notes" className="block text-sm font-medium text-gray-700 mb-1">
                   Notes
                 </label>
