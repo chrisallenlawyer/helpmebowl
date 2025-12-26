@@ -419,7 +419,7 @@ export default function OCRPage() {
     const inferRollsFromCumulative = () => {
       console.log('inferRollsFromCumulative called for bowler:', bowler.name, 'frameScores:', bowler.frameScores)
       
-      // Calculate points added each frame
+      // Calculate points added each frame (handle OCR errors where cumulative decreases)
       const framePoints: number[] = []
       for (let i = 0; i < 10; i++) {
         if (bowler.frameScores[i] !== null) {
@@ -427,7 +427,17 @@ export default function OCRPage() {
           const previousScore = i > 0 && bowler.frameScores[i - 1] !== null 
             ? bowler.frameScores[i - 1] as number 
             : 0
-          framePoints[i] = cumulativeScore - previousScore
+          const points = cumulativeScore - previousScore
+          
+          // If points are negative or suspiciously high, use a heuristic
+          // (OCR error - cumulative score went down, which shouldn't happen)
+          if (points < 0 || points > 30) {
+            // Use the cumulative score directly as an estimate, or skip
+            // For now, treat negative as 0 and cap at 30
+            framePoints[i] = Math.max(0, Math.min(30, points < 0 ? 0 : points))
+          } else {
+            framePoints[i] = points
+          }
         } else {
           framePoints[i] = 0
         }
@@ -435,36 +445,38 @@ export default function OCRPage() {
       
       console.log('Calculated framePoints:', framePoints)
 
-      // Work forwards frame by frame
+      // Work forwards frame by frame, using actual bowling scoring rules
       for (let i = 0; i < 9; i++) {
         const points = framePoints[i]
         
-        if (points >= 30) {
-          // Strike followed by two strikes
-          frames[i].firstRoll = 10
-          frames[i].isStrike = true
-        } else if (points >= 20 && points < 30) {
+        // Skip if points are 0 or invalid
+        if (points <= 0) {
+          continue
+        }
+        
+        if (points >= 20) {
           // Strike (10) + bonus from next frame(s)
-          // Points = 10 + next two rolls, so bonus = points - 10
+          // Points = 10 + next two rolls
           frames[i].firstRoll = 10
           frames[i].isStrike = true
-        } else if (points === 10) {
-          // Could be spare or strike with 0+0 bonus
-          // Check next frame to help decide
-          if (i + 1 < 10 && framePoints[i + 1] > 0) {
-            // If next frame has points, it's more likely a spare
-            // (strike with 0+0 would mean next frame was a strike, which is less common)
+        } else if (points >= 10 && points < 20) {
+          // Could be spare (10 total) or strike with low bonus
+          // If points is exactly 10, more likely a spare
+          // If points > 10, more likely a strike with some bonus
+          if (points === 10) {
+            // Default to spare - split pins evenly
             frames[i].firstRoll = 5
             frames[i].secondRoll = 5
             frames[i].isSpare = true
           } else {
-            // Default to strike if next frame is 0 or we're not sure
+            // Strike with bonus (between 10 and 20 total)
             frames[i].firstRoll = 10
             frames[i].isStrike = true
           }
-        } else if (points < 10) {
+        } else if (points < 10 && points > 0) {
           // Open frame - split pins (try to make it reasonable)
-          const firstRoll = Math.max(0, Math.min(9, Math.floor(points / 2)))
+          // Prefer first roll to be higher than second for better UX
+          const firstRoll = Math.max(0, Math.min(9, Math.ceil(points * 0.6)))
           const secondRoll = Math.max(0, points - firstRoll)
           frames[i].firstRoll = firstRoll
           frames[i].secondRoll = secondRoll
@@ -474,30 +486,42 @@ export default function OCRPage() {
 
       // Handle frame 10 separately
       const frame10Points = framePoints[9]
-      if (frame10Points >= 20) {
-        // Strike or spare with bonus (third roll)
-        frames[9].firstRoll = 10
-        frames[9].isStrike = true
-        const remaining = frame10Points - 10
-        if (remaining >= 10) {
-          frames[9].secondRoll = 10
-          frames[9].thirdRoll = remaining - 10
-        } else {
-          frames[9].secondRoll = Math.floor(remaining / 2)
-          frames[9].thirdRoll = remaining - (frames[9].secondRoll || 0)
+      if (frame10Points > 0) {
+        if (frame10Points >= 20) {
+          // Strike or spare with bonus (third roll)
+          frames[9].firstRoll = 10
+          frames[9].isStrike = true
+          const remaining = frame10Points - 10
+          if (remaining >= 10) {
+            frames[9].secondRoll = 10
+            frames[9].thirdRoll = Math.max(0, remaining - 10)
+          } else {
+            const secondRoll = Math.floor(remaining / 2)
+            frames[9].secondRoll = secondRoll
+            frames[9].thirdRoll = remaining - secondRoll
+          }
+        } else if (frame10Points >= 10 && frame10Points < 20) {
+          if (frame10Points === 10) {
+            // Spare
+            frames[9].firstRoll = 5
+            frames[9].secondRoll = 5
+            frames[9].isSpare = true
+            frames[9].thirdRoll = 0
+          } else {
+            // Strike with bonus
+            frames[9].firstRoll = 10
+            frames[9].isStrike = true
+            const remaining = frame10Points - 10
+            frames[9].secondRoll = Math.floor(remaining / 2)
+            frames[9].thirdRoll = remaining - (frames[9].secondRoll || 0)
+          }
+        } else if (frame10Points < 10) {
+          // Open frame
+          const firstRoll = Math.max(0, Math.min(9, Math.ceil(frame10Points * 0.6)))
+          frames[9].firstRoll = firstRoll
+          frames[9].secondRoll = frame10Points - firstRoll
+          frames[9].isOpen = true
         }
-      } else if (frame10Points === 10) {
-        // Spare
-        frames[9].firstRoll = 5
-        frames[9].secondRoll = 5
-        frames[9].isSpare = true
-        frames[9].thirdRoll = 0
-      } else if (frame10Points < 10) {
-        // Open frame
-        const firstRoll = Math.max(0, Math.min(9, Math.floor(frame10Points / 2)))
-        frames[9].firstRoll = firstRoll
-        frames[9].secondRoll = frame10Points - firstRoll
-        frames[9].isOpen = true
       }
     }
 
