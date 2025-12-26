@@ -267,31 +267,14 @@ export default function OCRPage() {
             // But if we see a number > 10, it might be two numbers concatenated
             const num = parseInt(token)
             if (num <= 10) {
-              // Single digit, push as is
+              // Single digit or two-digit number <= 10, push as is
               tokens.push(token)
             } else {
-              // Multiple digits concatenated - try to split intelligently
-              // Strategy: read digits from left to right, trying to make valid bowling scores
+              // Multiple digits concatenated - split into individual digits
+              // For bowling, each digit typically represents a single ball (0-9 pins)
+              // We'll split them all individually and let the frame parser handle pairing
               const digits = token.split('')
-              let i = 0
-              while (i < digits.length) {
-                if (i + 1 < digits.length) {
-                  // Try two digits first
-                  const twoDigit = parseInt(digits[i] + digits[i + 1])
-                  if (twoDigit <= 10) {
-                    tokens.push(digits[i] + digits[i + 1])
-                    i += 2
-                  } else {
-                    // Two digits would be > 10, so take single digit
-                    tokens.push(digits[i])
-                    i += 1
-                  }
-                } else {
-                  // Last digit
-                  tokens.push(digits[i])
-                  i += 1
-                }
-              }
+              tokens.push(...digits)
             }
           } else {
             // Try to extract X, digits, /, - from mixed token
