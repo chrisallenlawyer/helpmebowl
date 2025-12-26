@@ -37,6 +37,19 @@ select {
   color: #000000 !important;
 }
 
+/* Ensure select dropdowns show selected value clearly */
+select {
+  background-color: #ffffff !important;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+}
+
+select option {
+  color: #000000 !important;
+  background-color: #ffffff !important;
+}
+
 input[type="text"]::placeholder,
 input[type="email"]::placeholder,
 input[type="password"]::placeholder,
