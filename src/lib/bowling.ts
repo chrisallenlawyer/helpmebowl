@@ -277,7 +277,6 @@ export function getGameStateFromFrames(frames: Frame[]): GameState {
 
       // Skip if already calculated (unless a later frame changed)
       if (frame.score !== null) {
-        previousCumulativeScore = frame.score
         continue
       }
 
@@ -414,7 +413,6 @@ export function getGameStateFromFrames(frames: Frame[]): GameState {
         changed = true
       }
     }
-  }
   }
 
   return gameState
