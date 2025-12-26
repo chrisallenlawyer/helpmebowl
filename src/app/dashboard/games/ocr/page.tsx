@@ -218,49 +218,103 @@ export default function OCRPage() {
       let individualBalls: Array<{ first: number | 'X' | null; second: number | '/' | null; third?: number | 'X' | '/' | null }> = []
       
       if (ballResultsLine) {
-        // Extract tokens: X for strikes, / for spares, numbers for pins
-        const tokens = ballResultsLine.split(/\s+/).filter(t => t.trim().length > 0)
+        console.log(`Parsing ball results line for bowler: "${ballResultsLine}"`)
         
-        // Try to match tokens to frames
-        let tokenIndex = 0
-        for (let frame = 0; frame < 10 && tokenIndex < tokens.length; frame++) {
-          const token = tokens[tokenIndex].toUpperCase()
+        // More flexible token extraction - handle various formats
+        // Match: X (strike), numbers, / (spare), - (miss/gutter)
+        // Examples: "X 9/ 8- X 7/ 9-" or "X9/8-X7/9-" or "X  9/  8-  X"
+        const tokenPattern = /([Xx]|\d+|[/-]|[0-9]+[\/-]?)/g
+        const matches = ballResultsLine.match(tokenPattern)
+        
+        if (matches) {
+          const tokens = matches.map(m => m.trim().toUpperCase()).filter(t => t.length > 0)
+          console.log(`Extracted tokens:`, tokens)
           
-          if (token === 'X' || token === 'x') {
-            // Strike
-            individualBalls.push({ first: 'X', second: null })
-            tokenIndex++
-          } else {
-            // First ball
-            const firstNum = parseInt(token.replace(/[^\d]/g, ''))
-            if (!isNaN(firstNum) && firstNum >= 0 && firstNum <= 10) {
+          // Try to match tokens to frames
+          let tokenIndex = 0
+          for (let frame = 0; frame < 10 && tokenIndex < tokens.length; frame++) {
+            const token = tokens[tokenIndex]
+            
+            if (token === 'X') {
+              // Strike
+              individualBalls.push({ first: 'X', second: null })
               tokenIndex++
-              if (tokenIndex < tokens.length) {
-                const secondToken = tokens[tokenIndex].toUpperCase()
-                if (secondToken === '/') {
-                  // Spare
+            } else {
+              // Check if token contains a spare (e.g., "9/", "7/")
+              const spareMatch = token.match(/^(\d+)\/$/)
+              if (spareMatch) {
+                // Spare: first ball + "/"
+                const firstNum = parseInt(spareMatch[1])
+                if (firstNum >= 0 && firstNum <= 9) {
                   individualBalls.push({ first: firstNum, second: '/' })
                   tokenIndex++
                 } else {
-                  const secondNum = parseInt(secondToken.replace(/[^\d]/g, ''))
-                  if (!isNaN(secondNum) && secondNum >= 0 && secondNum <= 10) {
-                    // Open frame
-                    individualBalls.push({ first: firstNum, second: secondNum })
-                    tokenIndex++
+                  tokenIndex++
+                  individualBalls.push({ first: null, second: null })
+                }
+              } else {
+                // Try to parse as first ball number
+                const firstNum = parseInt(token.replace(/[^\d]/g, ''))
+                if (!isNaN(firstNum) && firstNum >= 0 && firstNum <= 10) {
+                  tokenIndex++
+                  
+                  // Check next token for second ball
+                  if (tokenIndex < tokens.length) {
+                    const nextToken = tokens[tokenIndex]
+                    
+                    if (nextToken === '/') {
+                      // Spare
+                      individualBalls.push({ first: firstNum, second: '/' })
+                      tokenIndex++
+                    } else if (nextToken === '-' || nextToken === '—') {
+                      // Gutter ball (second ball is 0)
+                      individualBalls.push({ first: firstNum, second: 0 })
+                      tokenIndex++
+                    } else {
+                      const secondNum = parseInt(nextToken.replace(/[^\d]/g, ''))
+                      if (!isNaN(secondNum) && secondNum >= 0 && secondNum <= 10) {
+                        // Open frame with two numbers
+                        individualBalls.push({ first: firstNum, second: secondNum })
+                        tokenIndex++
+                      } else {
+                        // Only first ball found
+                        individualBalls.push({ first: firstNum, second: null })
+                      }
+                    }
                   } else {
                     // Only first ball found
                     individualBalls.push({ first: firstNum, second: null })
                   }
+                } else {
+                  // Skip invalid token
+                  tokenIndex++
+                  individualBalls.push({ first: null, second: null })
                 }
-              } else {
-                individualBalls.push({ first: firstNum, second: null })
               }
-            } else {
-              // Skip invalid token
-              tokenIndex++
-              individualBalls.push({ first: null, second: null })
+            }
+            
+            // Handle 10th frame third roll if it's a strike or spare
+            if (frame === 9 && (individualBalls[9]?.first === 'X' || individualBalls[9]?.second === '/')) {
+              if (tokenIndex < tokens.length) {
+                const thirdToken = tokens[tokenIndex]
+                if (thirdToken === 'X') {
+                  individualBalls[9].third = 'X'
+                  tokenIndex++
+                } else {
+                  const thirdNum = parseInt(thirdToken.replace(/[^\d]/g, ''))
+                  if (!isNaN(thirdNum) && thirdNum >= 0 && thirdNum <= 10) {
+                    individualBalls[9].third = thirdNum
+                    tokenIndex++
+                  } else if (thirdToken === '/') {
+                    individualBalls[9].third = '/'
+                    tokenIndex++
+                  }
+                }
+              }
             }
           }
+          
+          console.log(`Parsed individual balls:`, individualBalls)
         }
       }
       
