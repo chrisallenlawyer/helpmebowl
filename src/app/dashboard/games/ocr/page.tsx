@@ -115,7 +115,7 @@ export default function OCRPage() {
       const { data } = await worker.recognize(imageFile)
       await worker.terminate()
 
-      // Extract all numbers from OCR text for manual mapping
+      // Extract all numbers from OCR text - use as reference for manual entry
       const allNumbers: number[] = []
       const numberPattern = /(\d{1,3})/g
       let match
@@ -127,24 +127,18 @@ export default function OCRPage() {
         }
       }
       
-      console.log('Detected numbers:', allNumbers)
-      console.log('OCR Text:', data.text)
+      console.log('OCR detected numbers:', allNumbers)
+      console.log('Full OCR text:', data.text)
       
-      // Store raw OCR data for manual entry
+      // Always show manual entry - use OCR numbers as reference only
       setDetectedNumbers(allNumbers)
+      setShowManualEntry(true)
       
-      // Try automatic parsing, but don't require it
+      // Optionally try automatic parsing as a helper (non-blocking)
       const bowlers = parseBowlingScores(data.text, data.words || [])
-      
       if (bowlers.length > 0) {
         setDetectedBowlers(bowlers)
-        if (bowlers.length === 1) {
-          setSelectedBowlerIndex(0)
-          extractFramesFromBowler(bowlers[0])
-        }
-      } else {
-        // No automatic detection - show manual entry interface
-        setShowManualEntry(true)
+        console.log('Auto-detected bowlers (optional):', bowlers)
       }
     } catch (err: any) {
       setError(`OCR processing failed: ${err.message}`)
@@ -807,16 +801,24 @@ export default function OCRPage() {
         </div>
       )}
 
-      {/* Manual Entry Option */}
-      {(showManualEntry || detectedBowlers.length === 0) && !processing && imagePreview && (
+      {/* Manual Entry - Primary Method */}
+      {showManualEntry && !processing && imagePreview && (
         <div className="bg-white shadow rounded-lg p-6 mb-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">
-            Manual Score Entry
+            Enter Frame Scores (Cumulative)
           </h2>
+          {detectedNumbers.length > 0 && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+              <p className="text-sm font-medium text-blue-900 mb-2">
+                OCR Detected Numbers (for reference):
+              </p>
+              <p className="text-sm text-blue-700 break-words">
+                {detectedNumbers.slice(0, 30).join(', ')}{detectedNumbers.length > 30 ? ` ... (${detectedNumbers.length - 30} more)` : ''}
+              </p>
+            </div>
+          )}
           <p className="text-sm text-gray-600 mb-4">
-            {detectedNumbers.length > 0 
-              ? `OCR detected these numbers: ${detectedNumbers.slice(0, 20).join(', ')}${detectedNumbers.length > 20 ? '...' : ''}. Please enter the frame scores (cumulative) from the image.`
-              : 'Enter the frame scores (cumulative) from the image.'}
+            Enter the cumulative score after each frame (the running total shown on the scoreboard).
           </p>
           
           <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-3 mb-4">
@@ -858,28 +860,49 @@ export default function OCRPage() {
             />
           </div>
           
-          <button
-            onClick={() => {
-              // Convert manual entry to bowler format
-              const frames = manualFrameScores.filter(s => s !== null) as number[]
-              if (frames.length >= 10) {
-                const bowler: DetectedBowler = {
-                  frameScores: frames.slice(0, 10),
-                  totalScore: manualTotal,
-                  confidence: 1.0,
+          <div className="flex gap-3">
+            <button
+              onClick={() => {
+                // Convert manual entry to bowler format
+                const frames = manualFrameScores.filter(s => s !== null && s !== undefined) as number[]
+                const validFrames = frames.length >= 10 ? frames.slice(0, 10) : []
+                
+                // Fill missing frames with null
+                while (validFrames.length < 10) {
+                  validFrames.push(null as any)
                 }
-                setDetectedBowlers([bowler])
-                setSelectedBowlerIndex(0)
-                extractFramesFromBowler(bowler)
-                setShowManualEntry(false)
-              } else {
-                setError('Please enter at least 10 frame scores')
-              }
-            }}
-            className="w-full bg-indigo-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-indigo-700"
-          >
-            Use These Scores
-          </button>
+                
+                if (frames.length >= 10) {
+                  const bowler: DetectedBowler = {
+                    frameScores: validFrames,
+                    totalScore: manualTotal,
+                    confidence: 1.0,
+                  }
+                  setDetectedBowlers([bowler])
+                  setSelectedBowlerIndex(0)
+                  extractFramesFromBowler(bowler)
+                  setShowManualEntry(false)
+                  setError(null)
+                } else {
+                  setError(`Please enter at least 10 frame scores. Currently entered: ${frames.length}`)
+                }
+              }}
+              className="flex-1 bg-indigo-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-indigo-700"
+            >
+              Continue with These Scores
+            </button>
+            {detectedBowlers.length > 0 && (
+              <button
+                onClick={() => {
+                  setShowManualEntry(false)
+                  setError(null)
+                }}
+                className="px-4 py-3 border border-gray-300 rounded-lg text-gray-700 bg-white hover:bg-gray-50"
+              >
+                Try Auto-Detected
+              </button>
+            )}
+          </div>
         </div>
       )}
 
