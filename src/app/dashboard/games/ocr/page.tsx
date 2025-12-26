@@ -719,9 +719,8 @@ export default function OCRPage() {
           </div>
 
           {/* Frames Grid - Always editable */}
-          {editingFrames && (
-            <div className="bg-gray-50 rounded-lg p-4 sm:p-6 mb-6">
-              <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-2 sm:gap-4">
+          <div className="bg-gray-50 rounded-lg p-4 sm:p-6 mb-6">
+            <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-2 sm:gap-4">
                 {extractedFrames.map((frame, frameIndex) => {
                   const isCurrent = frameIndex === currentFrame
                   return (
@@ -868,8 +867,7 @@ export default function OCRPage() {
                   )
                 })}
               </div>
-            </div>
-          )}
+          </div>
         </div>
       )}
 
