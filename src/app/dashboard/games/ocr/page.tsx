@@ -257,14 +257,50 @@ export default function OCRPage() {
       bowlers.sort((a, b) => b.confidence - a.confidence)
     }
     
-    // Fallback: text-based parsing - look for lines with 10+ consecutive numbers
-    if (bowlers.length === 0) {
+    // Fallback: Use extracted numbers to find sequences
+    if (bowlers.length === 0 && allNumbers.length >= 10) {
+      console.log('Trying fallback parsing with', allNumbers.length, 'numbers')
+      
+      // Try to find sequences of 10 numbers that could be frame scores
+      // Look for sequences where numbers are in reasonable ranges
+      for (let start = 0; start <= allNumbers.length - 10; start++) {
+        const candidateFrames = allNumbers.slice(start, start + 10)
+        const candidateTotal = start + 10 < allNumbers.length ? allNumbers[start + 10] : null
+        
+        // Very lenient validation - just check range
+        const hasValidRange = candidateFrames.every(f => f >= 0 && f <= 300)
+        const hasSomeProgression = candidateFrames.some((f, i) => i === 0 || f > candidateFrames[i - 1] || f === candidateFrames[i - 1])
+        const reasonableFinal = !candidateTotal || (candidateTotal >= candidateFrames[0] && candidateTotal <= 300)
+        
+        if (hasValidRange && (hasSomeProgression || reasonableFinal)) {
+          // Check if cumulative (higher confidence)
+          const isCumulative = candidateFrames.every((f, i) => i === 0 || f >= candidateFrames[i - 1])
+          
+          // Avoid duplicates
+          const isDuplicate = bowlers.some(b => 
+            b.frameScores.length === candidateFrames.length &&
+            b.frameScores.every((f, i) => f === candidateFrames[i]) &&
+            b.totalScore === candidateTotal
+          )
+          
+          if (!isDuplicate) {
+            bowlers.push({
+              frameScores: candidateFrames,
+              totalScore: candidateTotal,
+              confidence: isCumulative ? 0.7 : 0.4,
+            })
+            console.log('Found candidate sequence:', candidateFrames, candidateTotal)
+          }
+        }
+      }
+      
+      // Also try text-based line parsing
       const lines = text.split('\n').filter(line => line.trim().length > 0)
       
       lines.forEach(line => {
         // Extract all numbers from the line
         const numbers: number[] = []
-        const numberPattern = /\b(\d{1,3})\b/g
+        const numberPattern = /(\d{1,3})/g
         let match
         
         while ((match = numberPattern.exec(line)) !== null) {
@@ -281,13 +317,12 @@ export default function OCRPage() {
             const frames = numbers.slice(start, start + 10)
             const total = start + 10 < numbers.length ? numbers[start + 10] : null
             
-            // Check if this looks like valid bowling scores
-            const isCumulative = frames.every((f, i) => i === 0 || f >= frames[i - 1])
+            // Very lenient - just check range
             const hasValidRange = frames.every(f => f >= 0 && f <= 300)
-            const finalScoreReasonable = !total || (total >= frames[9] && total <= 300)
             
-            // More lenient - accept if valid range, prefer cumulative
             if (hasValidRange) {
+              const isCumulative = frames.every((f, i) => i === 0 || f >= frames[i - 1])
+              
               // Avoid duplicates
               const isDuplicate = bowlers.some(b => 
                 b.frameScores.length === frames.length &&
@@ -299,7 +334,7 @@ export default function OCRPage() {
                 bowlers.push({
                   frameScores: frames,
                   totalScore: total,
-                  confidence: isCumulative ? 0.7 : 0.5,
+                  confidence: isCumulative ? 0.6 : 0.3,
                 })
                 break // Take first valid sequence from this line
               }
@@ -308,10 +343,11 @@ export default function OCRPage() {
         }
       })
       
-      // Sort by confidence
+      // Sort by confidence, prefer cumulative sequences
       bowlers.sort((a, b) => b.confidence - a.confidence)
     }
 
+    console.log('Final bowlers detected:', bowlers.length)
     return bowlers.slice(0, 3) // Limit to 3 bowlers max
   }
 
