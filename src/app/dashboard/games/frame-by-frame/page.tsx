@@ -352,7 +352,7 @@ export default function FrameByFramePage() {
                       <div className="space-y-1">
                         <label className="text-xs text-gray-500 font-medium">Ball 3</label>
                         <select
-                          value={frame.thirdRoll === null ? '' : frame.thirdRoll === 10 ? 'X' : frame.thirdRoll.toString()}
+                          value={frame.thirdRoll === null || frame.thirdRoll === undefined ? '' : frame.thirdRoll === 10 ? 'X' : frame.thirdRoll.toString()}
                           onChange={(e) => handleRollChange(frameIndex, 3, e.target.value)}
                           disabled={frame.secondRoll === null}
                           className="w-full text-center text-black font-bold text-base sm:text-lg px-2 py-1.5 sm:py-2 border border-gray-300 rounded bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
