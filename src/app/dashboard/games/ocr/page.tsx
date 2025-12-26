@@ -306,10 +306,10 @@ export default function OCRPage() {
         }
         
         console.log(`Extracted tokens:`, tokens)
-          
-          // Try to match tokens to frames
-          let tokenIndex = 0
-          for (let frame = 0; frame < 10 && tokenIndex < tokens.length; frame++) {
+        
+        // Try to match tokens to frames
+        let tokenIndex = 0
+        for (let frame = 0; frame < 10 && tokenIndex < tokens.length; frame++) {
             const token = tokens[tokenIndex]
             
             if (token === 'X') {
