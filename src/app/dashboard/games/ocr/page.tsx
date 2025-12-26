@@ -268,25 +268,35 @@ export default function OCRPage() {
             const prevLetterCount = (prevLine.match(/[A-Za-z]/g) || []).length
             const prevDigitCount = (prevLine.match(/\d/g) || []).length
             const prevHasStrikeOrSpare = /[Xx\/]/.test(prevLine)
+            const prevHasDash = /[-—]/.test(prevLine)
             const prevBowlingCharCount = (prevLine.match(/[Xx\/\d-]/g) || []).length
             
-            // If previous line also looks like ball results (has bowling chars and not mostly letters), add it
-            // Be more lenient - accept lines with bowling characters even if they're short
-            const looksLikeBallResults = (prevHasStrikeOrSpare || prevDigitCount >= 2) && 
-                                        prevLetterCount < prevLine.length * 0.4 &&
-                                        prevBowlingCharCount >= 2
-            
-            // Also check if it's likely a name - skip those
+            // Check if it's likely a name - skip those
             const looksLikeName = /^[A-Z][A-Z\s]+$/i.test(prevLine.replace(/[^A-Z\s]/gi, '')) && 
                                  prevLine.replace(/[^A-Z]/gi, '').length > 2 && 
                                  prevLine.length < 30
             
-            if (looksLikeBallResults && !looksLikeName) {
+            // Check if it's likely a cumulative score line (just numbers, usually 2-3 digit scores)
+            // Cumulative scores are typically just numbers without bowling symbols
+            const looksLikeCumulativeScore = !prevHasStrikeOrSpare && !prevHasDash &&
+                                            /^\d+(\s+\d+)*$/.test(prevLine) &&
+                                            prevDigitCount >= 2 &&
+                                            prevLetterCount === 0
+            
+            // Only combine if it looks like ball results (has X, /, or - which are bowling-specific)
+            // Don't combine cumulative score lines or names
+            const looksLikeBallResults = (prevHasStrikeOrSpare || prevHasDash) && 
+                                        prevLetterCount < prevLine.length * 0.4
+            
+            if (looksLikeBallResults && !looksLikeName && !looksLikeCumulativeScore) {
               collectedLines.unshift({ index: j, line: prevLine }) // Add to beginning
               usedBallResultsLineIndices.add(j)
               console.log(`    Combining line ${j}: "${prevLine}"`)
             } else {
               // If we hit something that doesn't look like ball results, stop
+              if (looksLikeCumulativeScore) {
+                console.log(`    Stopping at line ${j} (looks like cumulative score): "${prevLine}"`)
+              }
               break
             }
           }
