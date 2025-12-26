@@ -78,10 +78,31 @@ export default function FrameByFramePage() {
     rollNumber: 1 | 2 | 3,
     value: string
   ) => {
-    const numValue = value === '' ? null : parseInt(value)
-    
-    if (numValue !== null && (numValue < 0 || numValue > 10)) {
-      return
+    let numValue: number | null = null
+
+    if (value === '') {
+      numValue = null
+    } else if (value === 'X') {
+      numValue = 10
+    } else if (value === '/') {
+      // For spare, calculate the value needed to make 10
+      if (rollNumber === 2) {
+        const frame = frames[frameIndex]
+        if (frame.firstRoll !== null) {
+          numValue = 10 - frame.firstRoll
+        } else {
+          return // Can't have a spare without a first roll
+        }
+      } else {
+        return // Spare only valid for second roll
+      }
+    } else {
+      const parsed = parseInt(value)
+      if (!isNaN(parsed) && parsed >= 0 && parsed <= 10) {
+        numValue = parsed
+      } else {
+        return
+      }
     }
 
     setFrames(prevFrames => {
@@ -101,7 +122,7 @@ export default function FrameByFramePage() {
         }
         frame.secondRoll = numValue
         // If frame 10 and not a strike/spare yet, no third roll
-        if (frameIndex === 9 && frame.firstRoll + (numValue || 0) < 10) {
+        if (frameIndex === 9 && frame.firstRoll !== null && numValue !== null && frame.firstRoll + numValue < 10) {
           frame.thirdRoll = null
         }
       } else if (rollNumber === 3) {
@@ -114,6 +135,18 @@ export default function FrameByFramePage() {
       newFrames[frameIndex] = frame
       return newFrames
     })
+  }
+
+  const getBall1Value = (frame: Frame): string => {
+    if (frame.firstRoll === null) return ''
+    if (frame.firstRoll === 10) return 'X'
+    return frame.firstRoll.toString()
+  }
+
+  const getBall2Value = (frame: Frame): string => {
+    if (frame.secondRoll === null) return ''
+    if (frame.firstRoll !== null && frame.firstRoll + frame.secondRoll === 10) return '/'
+    return frame.secondRoll.toString()
   }
 
   const getCurrentScore = (): number => {
@@ -247,77 +280,104 @@ export default function FrameByFramePage() {
 
                 {/* Frame 10 has different layout */}
                 {frameIndex === 9 ? (
-                  <div className="space-y-1 sm:space-y-2">
-                    <div className="flex gap-1">
-                      <input
-                        type="number"
-                        min="0"
-                        max="10"
-                        value={frame.firstRoll ?? ''}
+                  <div className="space-y-2">
+                    <div className="space-y-1">
+                      <label className="text-xs text-gray-500 font-medium">Ball 1</label>
+                      <select
+                        value={getBall1Value(frame)}
                         onChange={(e) => handleRollChange(frameIndex, 1, e.target.value)}
-                        className="w-full text-center text-black font-bold text-base sm:text-lg px-1 sm:px-2 py-1.5 sm:py-2 border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                        placeholder="1"
-                      />
-                      <input
-                        type="number"
-                        min="0"
-                        max="10"
-                        value={frame.secondRoll ?? ''}
-                        onChange={(e) => handleRollChange(frameIndex, 2, e.target.value)}
-                        disabled={frame.firstRoll === null}
-                        className="w-full text-center text-black font-bold text-base sm:text-lg px-1 sm:px-2 py-1.5 sm:py-2 border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                        placeholder="2"
-                      />
+                        className="w-full text-center text-black font-bold text-base sm:text-lg px-2 py-1.5 sm:py-2 border border-gray-300 rounded bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                      >
+                        <option value="">-</option>
+                        {[...Array(10)].map((_, i) => (
+                          <option key={i} value={i}>
+                            {i}
+                          </option>
+                        ))}
+                        <option value="X">X</option>
+                      </select>
                     </div>
+                    {frame.firstRoll !== null && frame.firstRoll < 10 && (
+                      <div className="space-y-1">
+                        <label className="text-xs text-gray-500 font-medium">Ball 2</label>
+                        <select
+                          value={getBall2Value(frame)}
+                          onChange={(e) => handleRollChange(frameIndex, 2, e.target.value)}
+                          className="w-full text-center text-black font-bold text-base sm:text-lg px-2 py-1.5 sm:py-2 border border-gray-300 rounded bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                        >
+                          <option value="">-</option>
+                          {[...Array(11 - frame.firstRoll)].map((_, i) => (
+                            <option key={i} value={i}>
+                              {i}
+                            </option>
+                          ))}
+                          <option value="/">/</option>
+                        </select>
+                      </div>
+                    )}
                     {(frame.isStrike || frame.isSpare) && (
-                      <input
-                        type="number"
-                        min="0"
-                        max="10"
-                        value={frame.thirdRoll ?? ''}
-                        onChange={(e) => handleRollChange(frameIndex, 3, e.target.value)}
-                        disabled={frame.secondRoll === null}
-                        className="w-full text-center text-black font-bold text-base sm:text-lg px-1 sm:px-2 py-1.5 sm:py-2 border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                        placeholder="3"
-                      />
+                      <div className="space-y-1">
+                        <label className="text-xs text-gray-500 font-medium">Ball 3</label>
+                        <select
+                          value={frame.thirdRoll ?? ''}
+                          onChange={(e) => handleRollChange(frameIndex, 3, e.target.value)}
+                          disabled={frame.secondRoll === null}
+                          className="w-full text-center text-black font-bold text-base sm:text-lg px-2 py-1.5 sm:py-2 border border-gray-300 rounded bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                        >
+                          <option value="">-</option>
+                          {[...Array(11)].map((_, i) => (
+                            <option key={i} value={i}>
+                              {i}
+                            </option>
+                          ))}
+                          <option value="X">X</option>
+                        </select>
+                      </div>
                     )}
                   </div>
                 ) : (
-                  <div className="flex gap-1">
-                    <input
-                      type="number"
-                      min="0"
-                      max="10"
-                      value={frame.firstRoll ?? ''}
-                      onChange={(e) => handleRollChange(frameIndex, 1, e.target.value)}
-                      className={`flex-1 text-center text-black font-bold text-base sm:text-lg px-1 sm:px-2 py-1.5 sm:py-2 border rounded ${
-                        frame.firstRoll === 10
-                          ? 'bg-indigo-100 border-indigo-300'
-                          : 'border-gray-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500'
-                      }`}
-                      placeholder="1"
-                    />
-                    {/* Show second input unless first roll is a strike (10 pins) */}
-                    {frame.firstRoll !== 10 && (
-                      <input
-                        type="number"
-                        min="0"
-                        max={10 - (frame.firstRoll || 0)}
-                        value={frame.secondRoll ?? ''}
-                        onChange={(e) => handleRollChange(frameIndex, 2, e.target.value)}
-                        disabled={frame.firstRoll === null}
-                        className={`flex-1 text-center text-black font-bold text-base sm:text-lg px-1 sm:px-2 py-1.5 sm:py-2 border rounded ${
-                          frame.isSpare
-                            ? 'bg-purple-100 border-purple-300'
-                            : 'border-gray-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 disabled:cursor-not-allowed'
+                  <div className="space-y-2">
+                    <div className="space-y-1">
+                      <label className="text-xs text-gray-500 font-medium">Ball 1</label>
+                      <select
+                        value={getBall1Value(frame)}
+                        onChange={(e) => handleRollChange(frameIndex, 1, e.target.value)}
+                        className={`w-full text-center text-black font-bold text-base sm:text-lg px-2 py-1.5 sm:py-2 border rounded focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 ${
+                          frame.firstRoll === 10
+                            ? 'bg-indigo-100 border-indigo-300'
+                            : 'bg-white border-gray-300'
                         }`}
-                        placeholder="2"
-                      />
-                    )}
-                    {/* Show X indicator when first roll is a strike */}
-                    {frame.firstRoll === 10 && (
-                      <div className="flex-1 flex items-center justify-center bg-indigo-100 border border-indigo-300 rounded font-bold text-indigo-700 text-base sm:text-lg py-1.5 sm:py-2">
-                        X
+                      >
+                        <option value="">-</option>
+                        {[...Array(10)].map((_, i) => (
+                          <option key={i} value={i}>
+                            {i}
+                          </option>
+                        ))}
+                        <option value="X">X</option>
+                      </select>
+                    </div>
+                    {/* Show Ball 2 only if first ball is not a strike */}
+                    {frame.firstRoll !== null && frame.firstRoll < 10 && (
+                      <div className="space-y-1">
+                        <label className="text-xs text-gray-500 font-medium">Ball 2</label>
+                        <select
+                          value={getBall2Value(frame)}
+                          onChange={(e) => handleRollChange(frameIndex, 2, e.target.value)}
+                          className={`w-full text-center text-black font-bold text-base sm:text-lg px-2 py-1.5 sm:py-2 border rounded focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 ${
+                            frame.isSpare
+                              ? 'bg-purple-100 border-purple-300'
+                              : 'bg-white border-gray-300'
+                          }`}
+                        >
+                          <option value="">-</option>
+                          {[...Array(11 - frame.firstRoll)].map((_, i) => (
+                            <option key={i} value={i}>
+                              {i}
+                            </option>
+                          ))}
+                          <option value="/">/</option>
+                        </select>
                       </div>
                     )}
                   </div>
