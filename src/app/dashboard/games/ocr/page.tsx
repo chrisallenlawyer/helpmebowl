@@ -417,6 +417,8 @@ export default function OCRPage() {
     // Helper function to infer rolls from cumulative scores
     // Work forwards, using the actual scoring rules to determine what rolls must have been
     const inferRollsFromCumulative = () => {
+      console.log('inferRollsFromCumulative called for bowler:', bowler.name, 'frameScores:', bowler.frameScores)
+      
       // Calculate points added each frame
       const framePoints: number[] = []
       for (let i = 0; i < 10; i++) {
@@ -430,6 +432,8 @@ export default function OCRPage() {
           framePoints[i] = 0
         }
       }
+      
+      console.log('Calculated framePoints:', framePoints)
 
       // Work forwards frame by frame
       for (let i = 0; i < 9; i++) {
@@ -516,6 +520,8 @@ export default function OCRPage() {
     const hasCompleteIndividualBalls = bowler.individualBalls && bowler.individualBalls.length >= 10 &&
       bowler.individualBalls.every(ball => ball.first !== null)
     
+    console.log('hasCompleteIndividualBalls:', hasCompleteIndividualBalls, 'individualBalls:', bowler.individualBalls)
+    
     if (hasCompleteIndividualBalls) {
       // Use OCR individual ball data
       for (let i = 0; i < 10 && i < bowler.individualBalls!.length; i++) {
@@ -551,9 +557,12 @@ export default function OCRPage() {
       }
     } else {
       // Infer rolls from cumulative scores
+      console.log('Calling inferRollsFromCumulative because individual balls are not complete')
       inferRollsFromCumulative()
+      console.log('After inferRollsFromCumulative, frames:', frames.map(f => ({ first: f.firstRoll, second: f.secondRoll, third: f.thirdRoll })))
     }
     
+    console.log('Final frames before setExtractedFrames:', frames.map(f => ({ first: f.firstRoll, second: f.secondRoll, third: f.thirdRoll, score: f.score })))
     setExtractedFrames(frames)
   }
 
