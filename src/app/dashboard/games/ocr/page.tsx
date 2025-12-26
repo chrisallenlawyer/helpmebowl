@@ -1013,7 +1013,7 @@ export default function OCRPage() {
                             <select
                               value={getBall1Value(frame)}
                               onChange={(e) => handleRollChange(frameIndex, 1, e.target.value)}
-                              className="w-full text-center text-black font-bold text-base sm:text-lg px-2 py-1.5 sm:py-2 border border-gray-300 rounded bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                              className="w-full text-center text-black font-bold text-lg sm:text-xl px-2 py-2 sm:py-2.5 border border-gray-300 rounded bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 min-h-[44px]"
                             >
                               <option value="">-</option>
                               {[...Array(10)].map((_, i) => (
@@ -1031,7 +1031,7 @@ export default function OCRPage() {
                                 <select
                                   value={frame.secondRoll === null ? '' : frame.secondRoll === 10 ? 'X' : frame.secondRoll.toString()}
                                   onChange={(e) => handleRollChange(frameIndex, 2, e.target.value)}
-                                  className="w-full text-center text-black font-bold text-base sm:text-lg px-2 py-1.5 sm:py-2 border border-gray-300 rounded bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                  className="w-full text-center text-black font-bold text-lg sm:text-xl px-2 py-2 sm:py-2.5 border border-gray-300 rounded bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 min-h-[44px]"
                                 >
                                   <option value="">-</option>
                                   {[...Array(11)].map((_, i) => (
@@ -1045,7 +1045,7 @@ export default function OCRPage() {
                                 <select
                                   value={getBall2Value(frame)}
                                   onChange={(e) => handleRollChange(frameIndex, 2, e.target.value)}
-                                  className="w-full text-center text-black font-bold text-base sm:text-lg px-2 py-1.5 sm:py-2 border border-gray-300 rounded bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                  className="w-full text-center text-black font-bold text-lg sm:text-xl px-2 py-2 sm:py-2.5 border border-gray-300 rounded bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 min-h-[44px]"
                                 >
                                   <option value="">-</option>
                                   {[...Array(11 - frame.firstRoll)].map((_, i) => (
@@ -1065,7 +1065,7 @@ export default function OCRPage() {
                                 value={frame.thirdRoll === null || frame.thirdRoll === undefined ? '' : frame.thirdRoll === 10 ? 'X' : frame.thirdRoll.toString()}
                                 onChange={(e) => handleRollChange(frameIndex, 3, e.target.value)}
                                 disabled={frame.secondRoll === null}
-                                className="w-full text-center text-black font-bold text-base sm:text-lg px-2 py-1.5 sm:py-2 border border-gray-300 rounded bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                                className="w-full text-center text-black font-bold text-lg sm:text-xl px-2 py-2 sm:py-2.5 border border-gray-300 rounded bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 disabled:cursor-not-allowed min-h-[44px]"
                               >
                                 <option value="">-</option>
                                 {[...Array(11)].map((_, i) => (
@@ -1085,7 +1085,7 @@ export default function OCRPage() {
                             <select
                               value={getBall1Value(frame)}
                               onChange={(e) => handleRollChange(frameIndex, 1, e.target.value)}
-                              className={`w-full text-center text-black font-bold text-base sm:text-lg px-2 py-1.5 sm:py-2 border rounded bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 ${
+                              className={`w-full text-center text-black font-bold text-lg sm:text-xl px-2 py-2 sm:py-2.5 border rounded bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 min-h-[44px] ${
                                 frame.firstRoll === 10
                                   ? 'bg-indigo-100 border-indigo-300'
                                   : 'border-gray-300'
@@ -1106,7 +1106,7 @@ export default function OCRPage() {
                               <select
                                 value={getBall2Value(frame)}
                                 onChange={(e) => handleRollChange(frameIndex, 2, e.target.value)}
-                                className={`w-full text-center text-black font-bold text-base sm:text-lg px-2 py-1.5 sm:py-2 border rounded bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 ${
+                                className={`w-full text-center text-black font-bold text-lg sm:text-xl px-2 py-2 sm:py-2.5 border rounded bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 min-h-[44px] ${
                                   frame.isSpare
                                     ? 'bg-purple-100 border-purple-300'
                                     : 'border-gray-300'
