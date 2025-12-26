@@ -30,6 +30,12 @@ export default async function GamesPage() {
         </div>
         <div className="flex gap-2 flex-wrap">
           <Link
+            href="/dashboard/games/ocr"
+            className="bg-green-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-green-700 text-sm sm:text-base"
+          >
+            📸 Photo OCR
+          </Link>
+          <Link
             href="/dashboard/games/frame-by-frame"
             className="bg-purple-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-purple-700 text-sm sm:text-base"
           >
