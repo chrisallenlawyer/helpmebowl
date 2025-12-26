@@ -676,7 +676,7 @@ export default function OCRPage() {
 
       // Use current gameState if available, otherwise calculate from extracted frames
       const finalGameState = gameState || (extractedFrames ? getGameStateFromFrames(extractedFrames) : null)
-      const finalScore = finalGameState?.[9]?.score || bowler.totalScore || 0
+      const finalScore = finalGameState?.[9]?.score || detectedBowlers[selectedBowlerIndex]?.totalScore || 0
 
       // Save game to database
       const { error } = await supabase.from('games').insert({
