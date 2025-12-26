@@ -163,6 +163,9 @@ export default function OCRPage() {
     // This is the most reliable pattern for bowling score sheets
     const lines = text.split('\n').filter(line => line.trim().length > 0)
     
+    // Track which ball results lines have been used to avoid matching the same line to multiple bowlers
+    const usedBallResultsLineIndices = new Set<number>()
+    
     // First, identify lines with exactly 10 cumulative scores (bottom rows)
     const cumulativeScoreLines: Array<{ lineIndex: number; scores: number[]; line: string }> = []
     
@@ -217,19 +220,30 @@ export default function OCRPage() {
       // Look for the individual ball results row (the line immediately before cumulative totals)
       // This should contain X, /, and numbers representing individual balls
       // Skip name lines (mostly letters) and look for lines with bowling score characters
+      // Search up to 6 lines back to find the ball results line
       let ballResultsLine: string | null = null
-      for (let i = lineIndex - 1; i >= Math.max(0, lineIndex - 3); i--) {
+      let ballResultsLineIndex: number | null = null
+      for (let i = lineIndex - 1; i >= Math.max(0, lineIndex - 7); i--) {
+        // Skip if this line has already been used for another bowler
+        if (usedBallResultsLineIndices.has(i)) {
+          console.log(`  Skipping line ${i} (already used for another bowler)`)
+          continue
+        }
+        
         const candidateLine = lines[i].trim()
         console.log(`  Checking line ${i} for ball results: "${candidateLine}"`)
-        // Skip lines that are mostly letters (names)
+        // Skip lines that are mostly letters (names) or are very short
         const letterCount = (candidateLine.match(/[A-Za-z]/g) || []).length
         const digitCount = (candidateLine.match(/\d/g) || []).length
         const hasStrikeOrSpare = /[Xx\/]/.test(candidateLine)
         
         // If it has bowling characters (X, /, digits) and not mostly letters, it's likely the ball results
-        if ((hasStrikeOrSpare || digitCount > 3) && letterCount < candidateLine.length * 0.5) {
+        // Also ensure it's not too short (at least 5 characters to avoid false positives)
+        if ((hasStrikeOrSpare || digitCount > 3) && letterCount < candidateLine.length * 0.5 && candidateLine.length >= 5) {
           ballResultsLine = candidateLine
-          console.log(`  Found ball results line for ${bowlerName || 'unknown'}: "${ballResultsLine}"`)
+          ballResultsLineIndex = i
+          usedBallResultsLineIndices.add(i)
+          console.log(`  Found ball results line for ${bowlerName || 'unknown'} at line ${i}: "${ballResultsLine}"`)
           break
         }
       }
