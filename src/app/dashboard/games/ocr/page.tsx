@@ -258,17 +258,29 @@ export default function OCRPage() {
       
       // Check if this looks like a cumulative score row (exactly 10 numbers, mostly increasing)
       if (numbers.length === 10) {
+        // Check if numbers are increasing (allowing small decreases for OCR errors)
         const isCumulative = numbers.every((n, i) => i === 0 || n >= numbers[i - 1] - 5)
-        if (isCumulative) {
+        // Also check that they're reasonable cumulative scores (should generally increase)
+        const increases = numbers.filter((n, i) => i > 0 && n >= numbers[i - 1] - 5).length
+        const isMostlyIncreasing = increases >= 8
+        
+        if (isCumulative || isMostlyIncreasing) {
           cumulativeScoreRows.push({
             rowIndex,
             scores: numbers,
             avgY: rowGroup.avgY
           })
-          console.log(`Found cumulative score row at Y=${rowGroup.avgY.toFixed(0)}:`, numbers)
+          console.log(`Found cumulative score row at Y=${rowGroup.avgY.toFixed(0)}:`, numbers, `(row text: "${text}")`)
+        } else {
+          console.log(`Row at Y=${rowGroup.avgY.toFixed(0)} has 10 numbers but not cumulative:`, numbers, `(row text: "${text}")`)
         }
+      } else if (numbers.length >= 8 && numbers.length <= 12) {
+        // Log rows with close to 10 numbers for debugging
+        console.log(`Row at Y=${rowGroup.avgY.toFixed(0)} has ${numbers.length} numbers:`, numbers, `(row text: "${text}")`)
       }
     })
+    
+    console.log(`Found ${cumulativeScoreRows.length} cumulative score rows total`)
     
     // For each cumulative score row, find the bowler
     cumulativeScoreRows.forEach((cumRow) => {
@@ -279,6 +291,8 @@ export default function OCRPage() {
       let bowlerName: string | undefined = undefined
       for (let i = rowIndex - 1; i >= Math.max(0, rowIndex - 5); i--) {
         const rowWords = rowGroups[i].words
+        const rowText = rowWords.map(w => w.text).join(' ')
+        
         // Look for words on the left side (X < 300) that look like names (mostly letters)
         const nameWords = rowWords.filter(w => {
           const text = w.text.trim()
@@ -289,7 +303,15 @@ export default function OCRPage() {
         
         if (nameWords.length > 0) {
           bowlerName = nameWords[0].text.trim()
-          console.log(`Found bowler name "${bowlerName}" above cumulative scores`)
+          console.log(`Found bowler name "${bowlerName}" above cumulative scores at row ${i} (Y=${rowGroups[i].avgY.toFixed(0)})`)
+          break
+        }
+        
+        // Also check if the row text itself looks like a name (for cases where name spans multiple words)
+        const leftSideText = rowWords.filter(w => w.bbox.x0 < 300).map(w => w.text.trim()).join(' ')
+        if (/^[A-Z]{2,}(\s+[A-Z]+)?$/i.test(leftSideText) && leftSideText.length >= 2 && leftSideText.length <= 15) {
+          bowlerName = leftSideText.split(/\s+/)[0] // Take first word
+          console.log(`Found bowler name "${bowlerName}" from row text "${leftSideText}" at row ${i}`)
           break
         }
       }
