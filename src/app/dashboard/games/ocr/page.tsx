@@ -180,13 +180,15 @@ export default function OCRPage() {
     
     console.log(`Spatial parser: ${words.length} words, ${paragraphs.length} paragraphs`)
     
-    // Try using paragraphs first (better grouping from Google Vision)
+    // Use paragraph data for better grouping (handles angled lines better)
+    let rowGroups: Array<{ words: any[]; avgY: number; text: string }> = []
+    
     if (paragraphs.length > 0) {
-      console.log('Attempting to use paragraph data for better grouping...')
+      console.log('Using paragraph data for row grouping (better for angled lines)...')
       // Group paragraphs by Y coordinate to find rows
-      const paragraphRows: Array<{ paragraphs: any[]; avgY: number }> = []
+      const paragraphRows: Array<{ paragraphs: any[]; avgY: number; text: string }> = []
       const processedParaIndices = new Set<number>()
-      const PARA_Y_TOLERANCE = 50
+      const PARA_Y_TOLERANCE = 60 // Increased tolerance for angled lines
       
       paragraphs.forEach((para, idx) => {
         if (processedParaIndices.has(idx)) return
@@ -195,25 +197,61 @@ export default function OCRPage() {
         const paraGroup = [para]
         processedParaIndices.add(idx)
         
-        // Find other paragraphs in the same row
+        // Find other paragraphs in the same row (accounting for angled lines)
         paragraphs.forEach((otherPara, otherIdx) => {
           if (processedParaIndices.has(otherIdx)) return
           const otherMidY = (otherPara.bbox.y0 + otherPara.bbox.y1) / 2
+          // For angled lines, we need larger tolerance
           if (Math.abs(midY - otherMidY) <= PARA_Y_TOLERANCE) {
             paraGroup.push(otherPara)
             processedParaIndices.add(otherIdx)
           }
         })
         
+        // Sort paragraphs in row by X coordinate
+        paraGroup.sort((a, b) => a.bbox.x0 - b.bbox.x0)
+        
+        const combinedText = paraGroup.map(p => p.text).join(' ')
         paragraphRows.push({
           paragraphs: paraGroup,
-          avgY: midY
+          avgY: midY,
+          text: combinedText
         })
       })
       
       paragraphRows.sort((a, b) => a.avgY - b.avgY)
       console.log(`Grouped paragraphs into ${paragraphRows.length} rows`)
+      
+      // Convert paragraph rows to word-based rows for compatibility
+      // Extract words from paragraphs and reconstruct word rows
+      paragraphRows.forEach((paraRow) => {
+        const rowWords: any[] = []
+        paraRow.paragraphs.forEach(para => {
+          // Find words that belong to these paragraphs based on position
+          words.forEach(word => {
+            const wordMidY = (word.bbox.y0 + word.bbox.y1) / 2
+            const wordMidX = (word.bbox.x0 + word.bbox.x1) / 2
+            // Check if word is within paragraph bounding box (with tolerance)
+            if (wordMidY >= para.bbox.y0 - 10 && wordMidY <= para.bbox.y1 + 10 &&
+                wordMidX >= para.bbox.x0 - 20 && wordMidX <= para.bbox.x1 + 20) {
+              rowWords.push(word)
+            }
+          })
+        })
+        
+        // Sort words by X coordinate
+        rowWords.sort((a, b) => a.bbox.x0 - b.bbox.x0)
+        
+        rowGroups.push({
+          words: rowWords,
+          avgY: paraRow.avgY,
+          text: paraRow.text
+        })
+      })
     }
+    
+    // Fallback to word-based grouping if no paragraphs
+    if (rowGroups.length === 0) {
     
     // Group words by approximate Y coordinate (rows)
     // Words with similar Y coordinates are likely in the same row
@@ -271,8 +309,9 @@ export default function OCRPage() {
       })
     })
     
-    // Sort rows by Y coordinate (top to bottom)
-    rowGroups.sort((a, b) => a.avgY - b.avgY)
+      // Sort rows by Y coordinate (top to bottom)
+      rowGroups.sort((a, b) => a.avgY - b.avgY)
+    }
     
     console.log(`Found ${rowGroups.length} rows from spatial analysis`)
     
@@ -288,7 +327,7 @@ export default function OCRPage() {
     
     rowGroups.forEach((rowGroup, rowIndex) => {
       const numbers: number[] = []
-      const text = rowGroup.words.map(w => w.text).join(' ')
+      const text = rowGroup.text || rowGroup.words.map(w => w.text).join(' ')
       
       // Extract all numbers from the row
       const numberPattern = /\b(\d{1,3})\b/g
