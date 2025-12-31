@@ -329,7 +329,9 @@ export default function OCRPage() {
       const numbers: number[] = []
       const text = rowGroup.text || rowGroup.words.map(w => w.text).join(' ')
       
-      // Extract all numbers from the row
+      // Extract all numbers from the row, but be smart about it
+      // Sometimes cumulative scores are mixed with text like "BRI 18 26 46..." or "X 156 X 186"
+      // We need to extract just the numbers that look like cumulative scores
       const numberPattern = /\b(\d{1,3})\b/g
       let match
       while ((match = numberPattern.exec(text)) !== null) {
@@ -339,11 +341,39 @@ export default function OCRPage() {
         }
       }
       
+      // Also check if numbers might span multiple rows (for angled lines)
+      // Look at adjacent rows to see if we can combine them
+      let combinedNumbers = [...numbers]
+      if (numbers.length >= 6 && numbers.length < 10 && rowIndex < rowGroups.length - 1) {
+        // Check next row to see if it continues the sequence
+        const nextRow = rowGroups[rowIndex + 1]
+        const nextText = nextRow.text || nextRow.words.map(w => w.text).join(' ')
+        const nextNumbers: number[] = []
+        let nextMatch
+        while ((nextMatch = numberPattern.exec(nextText)) !== null) {
+          const num = parseInt(nextMatch[1])
+          if (num >= 0 && num <= 300) {
+            nextNumbers.push(num)
+          }
+        }
+        
+        // If next row has numbers that continue increasing from this row, combine them
+        if (nextNumbers.length > 0) {
+          const lastNumber = numbers[numbers.length - 1]
+          const firstNextNumber = nextNumbers[0]
+          // If next row continues the sequence (numbers keep increasing), combine
+          if (firstNextNumber >= lastNumber - 10 && firstNextNumber <= lastNumber + 100) {
+            combinedNumbers = [...numbers, ...nextNumbers]
+            console.log(`Combined row ${rowIndex} and ${rowIndex + 1} numbers:`, combinedNumbers)
+          }
+        }
+      }
+      
       // Check if this looks like a cumulative score row (10-12 numbers, mostly increasing)
       // Some scorecards have extra columns (total, handicap, etc.) so we accept 10-12 numbers
-      if (numbers.length >= 10 && numbers.length <= 12) {
+      if (combinedNumbers.length >= 10 && combinedNumbers.length <= 12) {
         // Take first 10 numbers as frame scores (in case there are extra columns)
-        const frameScores = numbers.slice(0, 10)
+        const frameScores = combinedNumbers.slice(0, 10)
         
         // Check if numbers are increasing (allowing small decreases for OCR errors)
         const isCumulative = frameScores.every((n, i) => i === 0 || n >= frameScores[i - 1] - 5)
