@@ -149,8 +149,17 @@ export default function OCRPage() {
       console.log('Google Vision OCR successful')
       console.log('Full OCR data:', ocrData)
       
-      // Parse bowling scores from OCR text
-      const bowlers = parseBowlingScores(ocrText, ocrWords)
+      // Try new spatial parser first, fallback to old parser if needed
+      let bowlers: DetectedBowler[] = []
+      if (ocrData.words && ocrData.words.length > 0) {
+        bowlers = parseBowlingScoresSpatial(ocrData.words, ocrData.paragraphs || [])
+      }
+      
+      // Fallback to text-based parser if spatial parser didn't find anything
+      if (bowlers.length === 0) {
+        console.log('Spatial parser found no bowlers, trying text-based parser...')
+        bowlers = parseBowlingScores(ocrText, ocrWords)
+      }
       if (bowlers.length > 0) {
         setDetectedBowlers(bowlers)
         console.log('Auto-detected bowlers:', bowlers)
@@ -163,6 +172,242 @@ export default function OCRPage() {
     } finally {
       setProcessing(false)
     }
+  }
+
+  // New spatial parser using bounding box coordinates
+  const parseBowlingScoresSpatial = (words: any[], paragraphs: any[]): DetectedBowler[] => {
+    const bowlers: DetectedBowler[] = []
+    
+    // Group words by approximate Y coordinate (rows)
+    // Words with similar Y coordinates are likely in the same row
+    const Y_TOLERANCE = 30 // Pixels - words within this distance vertically are considered same row
+    
+    // Find frame number row first (should be near the top with numbers 1-10)
+    const frameNumberWords = words.filter(w => {
+      const text = w.text.trim()
+      return /^[0-9]$/.test(text) && parseInt(text) >= 1 && parseInt(text) <= 10
+    })
+    
+    // Get Y coordinate range for frame numbers
+    let frameNumberMinY = Infinity
+    let frameNumberMaxY = -Infinity
+    frameNumberWords.forEach(w => {
+      const midY = (w.bbox.y0 + w.bbox.y1) / 2
+      frameNumberMinY = Math.min(frameNumberMinY, midY)
+      frameNumberMaxY = Math.max(frameNumberMaxY, midY)
+    })
+    
+    // Group words into rows based on Y coordinate
+    const rowGroups: Array<{ words: any[]; avgY: number }> = []
+    const processedWords = new Set<number>()
+    
+    words.forEach((word, idx) => {
+      if (processedWords.has(idx)) return
+      
+      const midY = (word.bbox.y0 + word.bbox.y1) / 2
+      // Skip frame number row
+      if (midY >= frameNumberMinY - Y_TOLERANCE && midY <= frameNumberMaxY + Y_TOLERANCE) {
+        processedWords.add(idx)
+        return
+      }
+      
+      const rowWords = [word]
+      processedWords.add(idx)
+      
+      // Find other words in the same row
+      words.forEach((otherWord, otherIdx) => {
+        if (processedWords.has(otherIdx)) return
+        
+        const otherMidY = (otherWord.bbox.y0 + otherWord.bbox.y1) / 2
+        if (Math.abs(midY - otherMidY) <= Y_TOLERANCE) {
+          rowWords.push(otherWord)
+          processedWords.add(otherIdx)
+        }
+      })
+      
+      // Sort words in row by X coordinate (left to right)
+      rowWords.sort((a, b) => a.bbox.x0 - b.bbox.x0)
+      
+      rowGroups.push({
+        words: rowWords,
+        avgY: midY
+      })
+    })
+    
+    // Sort rows by Y coordinate (top to bottom)
+    rowGroups.sort((a, b) => a.avgY - b.avgY)
+    
+    console.log(`Found ${rowGroups.length} rows from spatial analysis`)
+    
+    // Identify cumulative score rows (rows with exactly 10 numbers in increasing order)
+    const cumulativeScoreRows: Array<{ rowIndex: number; scores: number[]; avgY: number }> = []
+    
+    rowGroups.forEach((rowGroup, rowIndex) => {
+      const numbers: number[] = []
+      const text = rowGroup.words.map(w => w.text).join(' ')
+      
+      // Extract all numbers from the row
+      const numberPattern = /\b(\d{1,3})\b/g
+      let match
+      while ((match = numberPattern.exec(text)) !== null) {
+        const num = parseInt(match[1])
+        if (num >= 0 && num <= 300) {
+          numbers.push(num)
+        }
+      }
+      
+      // Check if this looks like a cumulative score row (exactly 10 numbers, mostly increasing)
+      if (numbers.length === 10) {
+        const isCumulative = numbers.every((n, i) => i === 0 || n >= numbers[i - 1] - 5)
+        if (isCumulative) {
+          cumulativeScoreRows.push({
+            rowIndex,
+            scores: numbers,
+            avgY: rowGroup.avgY
+          })
+          console.log(`Found cumulative score row at Y=${rowGroup.avgY.toFixed(0)}:`, numbers)
+        }
+      }
+    })
+    
+    // For each cumulative score row, find the bowler
+    cumulativeScoreRows.forEach((cumRow) => {
+      const rowIndex = cumRow.rowIndex
+      const cumulativeScores = cumRow.scores
+      
+      // Look backwards for the bowler's name (usually 1-3 rows above)
+      let bowlerName: string | undefined = undefined
+      for (let i = rowIndex - 1; i >= Math.max(0, rowIndex - 5); i--) {
+        const rowWords = rowGroups[i].words
+        // Look for words on the left side (X < 300) that look like names (mostly letters)
+        const nameWords = rowWords.filter(w => {
+          const text = w.text.trim()
+          const isLeftSide = w.bbox.x0 < 300
+          const isMostlyLetters = /^[A-Z]{2,}$/i.test(text) && text.length >= 2 && text.length <= 10
+          return isLeftSide && isMostlyLetters && !/^\d+$/.test(text)
+        })
+        
+        if (nameWords.length > 0) {
+          bowlerName = nameWords[0].text.trim()
+          console.log(`Found bowler name "${bowlerName}" above cumulative scores`)
+          break
+        }
+      }
+      
+      // Look for ball results row (should be 1-2 rows above cumulative scores)
+      let ballResultsWords: any[] = []
+      for (let i = rowIndex - 1; i >= Math.max(0, rowIndex - 4); i--) {
+        const rowWords = rowGroups[i].words
+        const rowText = rowWords.map(w => w.text).join(' ')
+        
+        // Check if this row has bowling-specific characters (X, /, or many numbers)
+        const hasStrikeOrSpare = /[Xx\/]/.test(rowText)
+        const digitCount = (rowText.match(/\d/g) || []).length
+        const letterCount = (rowText.match(/[A-Za-z]/g) || []).length
+        
+        // Ball results rows typically have X, /, or at least 5-6 numbers, and minimal letters
+        if ((hasStrikeOrSpare || digitCount >= 6) && letterCount < 5) {
+          // Sort by X coordinate to get the sequence
+          ballResultsWords = [...rowWords].sort((a, b) => a.bbox.x0 - b.bbox.x0)
+          console.log(`Found ball results row above cumulative scores: "${rowText}"`)
+          break
+        }
+      }
+      
+      // Parse individual ball results from the ball results row
+      const individualBalls: Array<{ first: number | 'X' | null; second: number | '/' | null; third?: number | 'X' | '/' | null }> = []
+      
+      if (ballResultsWords.length > 0) {
+        // Group words into frames based on X position (10 frames across the page)
+        // Estimate frame boundaries based on X coordinates
+        const minX = Math.min(...ballResultsWords.map(w => w.bbox.x0))
+        const maxX = Math.max(...ballResultsWords.map(w => w.bbox.x1))
+        const frameWidth = (maxX - minX) / 10
+        
+        // Sort ball results words by X position
+        const sortedWords = [...ballResultsWords].sort((a, b) => a.bbox.x0 - b.bbox.x0)
+        
+        // For each frame (1-10), find words that fall within its X range
+        for (let frameNum = 0; frameNum < 10; frameNum++) {
+          const frameStartX = minX + (frameNum * frameWidth)
+          const frameEndX = minX + ((frameNum + 1) * frameWidth)
+          
+          // Find words in this frame's X range
+          const frameWords = sortedWords.filter(w => {
+            const wordMidX = (w.bbox.x0 + w.bbox.x1) / 2
+            return wordMidX >= frameStartX - frameWidth * 0.2 && wordMidX <= frameEndX + frameWidth * 0.2
+          })
+          
+          // Parse frame words into ball results
+          let first: number | 'X' | null = null
+          let second: number | '/' | null = null
+          let third: number | 'X' | '/' | null | undefined = undefined
+          
+          const frameText = frameWords.map(w => w.text.trim().toUpperCase()).join(' ')
+          
+          // Try to parse strikes (X)
+          if (/X/.test(frameText)) {
+            first = 'X'
+            // Check for second and third balls in frame 10
+            if (frameNum === 9) {
+              const xCount = (frameText.match(/X/g) || []).length
+              if (xCount >= 2) {
+                second = 'X'
+              }
+              if (xCount >= 3) {
+                third = 'X'
+              } else if (/\d/.test(frameText)) {
+                const numbers = frameText.match(/\d+/g) || []
+                if (numbers.length > 0) {
+                  second = parseInt(numbers[0]) as any
+                }
+                if (numbers.length > 1) {
+                  third = parseInt(numbers[1]) as any
+                }
+              }
+            }
+          } else {
+            // Try to parse spare (/)
+            const spareMatch = frameText.match(/(\d+)\s*\/|(\d+)\//)
+            if (spareMatch) {
+              first = parseInt(spareMatch[1] || spareMatch[2]) as any
+              second = '/'
+              if (frameNum === 9 && /\d/.test(frameText.replace(spareMatch[0], ''))) {
+                const remainingText = frameText.replace(spareMatch[0], '')
+                const thirdMatch = remainingText.match(/\d+/)
+                if (thirdMatch) {
+                  third = parseInt(thirdMatch[0]) as any
+                }
+              }
+            } else {
+              // Try to parse open frame (two numbers)
+              const numbers = frameText.match(/\d+/g) || []
+              if (numbers.length >= 1) {
+                first = parseInt(numbers[0]) as any
+              }
+              if (numbers.length >= 2) {
+                second = parseInt(numbers[1]) as any
+              }
+              if (frameNum === 9 && numbers.length >= 3) {
+                third = parseInt(numbers[2]) as any
+              }
+            }
+          }
+          
+          individualBalls.push({ first, second, third })
+        }
+      }
+      
+      bowlers.push({
+        name: bowlerName,
+        frameScores: cumulativeScores,
+        totalScore: cumulativeScores[9] || null,
+        confidence: 0.8, // High confidence for spatial parsing
+        individualBalls: individualBalls.length > 0 ? individualBalls : undefined
+      })
+    })
+    
+    return bowlers
   }
 
   const parseBowlingScores = (text: string, words: any[]): DetectedBowler[] => {
