@@ -358,10 +358,10 @@ export default function OCRPage() {
                 third = 'X'
               } else if (/\d/.test(frameText)) {
                 const numbers = frameText.match(/\d+/g) || []
-                if (numbers.length > 0) {
+                if (numbers.length > 0 && numbers[0]) {
                   second = parseInt(numbers[0]) as any
                 }
-                if (numbers.length > 1) {
+                if (numbers.length > 1 && numbers[1]) {
                   third = parseInt(numbers[1]) as any
                 }
               }
