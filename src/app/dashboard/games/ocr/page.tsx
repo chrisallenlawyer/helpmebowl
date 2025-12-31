@@ -217,7 +217,7 @@ export default function OCRPage() {
     
     // Group words by approximate Y coordinate (rows)
     // Words with similar Y coordinates are likely in the same row
-    const Y_TOLERANCE = 30 // Pixels - words within this distance vertically are considered same row
+    const Y_TOLERANCE = 50 // Pixels - words within this distance vertically are considered same row (increased for better grouping)
     
     // Find frame number row first (should be near the top with numbers 1-10)
     const frameNumberWords = words.filter(w => {
@@ -275,6 +275,13 @@ export default function OCRPage() {
     rowGroups.sort((a, b) => a.avgY - b.avgY)
     
     console.log(`Found ${rowGroups.length} rows from spatial analysis`)
+    
+    // Log all rows for debugging
+    rowGroups.forEach((rowGroup, idx) => {
+      const text = rowGroup.words.map(w => w.text).join(' ')
+      const numbers = text.match(/\b\d{1,3}\b/g) || []
+      console.log(`Row ${idx} (Y=${rowGroup.avgY.toFixed(0)}): "${text.substring(0, 80)}..." (${numbers.length} numbers)`)
+    })
     
     // Identify cumulative score rows (rows with exactly 10 numbers in increasing order)
     const cumulativeScoreRows: Array<{ rowIndex: number; scores: number[]; avgY: number }> = []
