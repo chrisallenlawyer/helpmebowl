@@ -315,7 +315,7 @@ export default function OCRPage() {
       }
       
       // Parse individual ball results from the ball results row
-      const individualBalls: Array<{ first: number | 'X' | null; second: number | '/' | null; third?: number | 'X' | '/' | null }> = []
+      const individualBalls: Array<{ first: number | 'X' | null; second: number | '/' | 'X' | null; third?: number | 'X' | '/' | null }> = []
       
       if (ballResultsWords.length > 0) {
         // Group words into frames based on X position (10 frames across the page)
