@@ -178,6 +178,43 @@ export default function OCRPage() {
   const parseBowlingScoresSpatial = (words: any[], paragraphs: any[]): DetectedBowler[] => {
     const bowlers: DetectedBowler[] = []
     
+    console.log(`Spatial parser: ${words.length} words, ${paragraphs.length} paragraphs`)
+    
+    // Try using paragraphs first (better grouping from Google Vision)
+    if (paragraphs.length > 0) {
+      console.log('Attempting to use paragraph data for better grouping...')
+      // Group paragraphs by Y coordinate to find rows
+      const paragraphRows: Array<{ paragraphs: any[]; avgY: number }> = []
+      const processedParaIndices = new Set<number>()
+      const PARA_Y_TOLERANCE = 50
+      
+      paragraphs.forEach((para, idx) => {
+        if (processedParaIndices.has(idx)) return
+        
+        const midY = (para.bbox.y0 + para.bbox.y1) / 2
+        const paraGroup = [para]
+        processedParaIndices.add(idx)
+        
+        // Find other paragraphs in the same row
+        paragraphs.forEach((otherPara, otherIdx) => {
+          if (processedParaIndices.has(otherIdx)) return
+          const otherMidY = (otherPara.bbox.y0 + otherPara.bbox.y1) / 2
+          if (Math.abs(midY - otherMidY) <= PARA_Y_TOLERANCE) {
+            paraGroup.push(otherPara)
+            processedParaIndices.add(otherIdx)
+          }
+        })
+        
+        paragraphRows.push({
+          paragraphs: paraGroup,
+          avgY: midY
+        })
+      })
+      
+      paragraphRows.sort((a, b) => a.avgY - b.avgY)
+      console.log(`Grouped paragraphs into ${paragraphRows.length} rows`)
+    }
+    
     // Group words by approximate Y coordinate (rows)
     // Words with similar Y coordinates are likely in the same row
     const Y_TOLERANCE = 30 // Pixels - words within this distance vertically are considered same row
@@ -256,27 +293,39 @@ export default function OCRPage() {
         }
       }
       
-      // Check if this looks like a cumulative score row (exactly 10 numbers, mostly increasing)
-      if (numbers.length === 10) {
+      // Check if this looks like a cumulative score row (10-12 numbers, mostly increasing)
+      // Some scorecards have extra columns (total, handicap, etc.) so we accept 10-12 numbers
+      if (numbers.length >= 10 && numbers.length <= 12) {
+        // Take first 10 numbers as frame scores (in case there are extra columns)
+        const frameScores = numbers.slice(0, 10)
+        
         // Check if numbers are increasing (allowing small decreases for OCR errors)
-        const isCumulative = numbers.every((n, i) => i === 0 || n >= numbers[i - 1] - 5)
+        const isCumulative = frameScores.every((n, i) => i === 0 || n >= frameScores[i - 1] - 5)
         // Also check that they're reasonable cumulative scores (should generally increase)
-        const increases = numbers.filter((n, i) => i > 0 && n >= numbers[i - 1] - 5).length
-        const isMostlyIncreasing = increases >= 8
+        const increases = frameScores.filter((n, i) => i > 0 && n >= frameScores[i - 1] - 5).length
+        const isMostlyIncreasing = increases >= 7 // Allow some OCR errors
         
         if (isCumulative || isMostlyIncreasing) {
-          cumulativeScoreRows.push({
-            rowIndex,
-            scores: numbers,
-            avgY: rowGroup.avgY
-          })
-          console.log(`Found cumulative score row at Y=${rowGroup.avgY.toFixed(0)}:`, numbers, `(row text: "${text}")`)
+          // Verify the scores look reasonable (all <= 300, generally increasing)
+          const allReasonable = frameScores.every(n => n >= 0 && n <= 300)
+          const lastScore = frameScores[9]
+          
+          if (allReasonable && lastScore >= 50) { // Final score should be at least 50 (reasonable minimum)
+            cumulativeScoreRows.push({
+              rowIndex,
+              scores: frameScores,
+              avgY: rowGroup.avgY
+            })
+            console.log(`Found cumulative score row at Y=${rowGroup.avgY.toFixed(0)}:`, frameScores, `(row text: "${text}", had ${numbers.length} total numbers)`)
+          } else {
+            console.log(`Row at Y=${rowGroup.avgY.toFixed(0)} has ${numbers.length} numbers but scores don't look reasonable:`, frameScores)
+          }
         } else {
-          console.log(`Row at Y=${rowGroup.avgY.toFixed(0)} has 10 numbers but not cumulative:`, numbers, `(row text: "${text}")`)
+          console.log(`Row at Y=${rowGroup.avgY.toFixed(0)} has ${numbers.length} numbers but not cumulative:`, frameScores, `(row text: "${text}")`)
         }
-      } else if (numbers.length >= 8 && numbers.length <= 12) {
+      } else if (numbers.length >= 8 && numbers.length < 10) {
         // Log rows with close to 10 numbers for debugging
-        console.log(`Row at Y=${rowGroup.avgY.toFixed(0)} has ${numbers.length} numbers:`, numbers, `(row text: "${text}")`)
+        console.log(`Row at Y=${rowGroup.avgY.toFixed(0)} has ${numbers.length} numbers (less than 10):`, numbers, `(row text: "${text}")`)
       }
     })
     
