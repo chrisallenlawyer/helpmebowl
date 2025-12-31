@@ -13,7 +13,7 @@ interface DetectedBowler {
   frameScores: (number | null)[]
   totalScore: number | null
   confidence: number
-  individualBalls?: Array<{ first: number | 'X' | null; second: number | '/' | null; third?: number | 'X' | '/' | null }>
+  individualBalls?: Array<{ first: number | 'X' | null; second: number | '/' | 'X' | null; third?: number | 'X' | '/' | null }>
 }
 
 export default function OCRPage() {
@@ -340,7 +340,7 @@ export default function OCRPage() {
           
           // Parse frame words into ball results
           let first: number | 'X' | null = null
-          let second: number | '/' | null = null
+          let second: number | '/' | 'X' | null = null
           let third: number | 'X' | '/' | null | undefined = undefined
           
           const frameText = frameWords.map(w => w.text.trim().toUpperCase()).join(' ')
