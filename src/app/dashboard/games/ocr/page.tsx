@@ -407,59 +407,116 @@ export default function OCRPage() {
     
     console.log(`Found ${cumulativeScoreRows.length} cumulative score rows total`)
     
+    // Track which rows have been used and which bowler names found to avoid duplicates
+    const usedCumulativeRows = new Set<number>()
+    const foundBowlerNames = new Set<string>()
+    
     // For each cumulative score row, find the bowler
     cumulativeScoreRows.forEach((cumRow) => {
       const rowIndex = cumRow.rowIndex
       const cumulativeScores = cumRow.scores
       
-      // Look backwards for the bowler's name (usually 1-3 rows above)
+      // Skip if this row is already used
+      if (usedCumulativeRows.has(rowIndex)) {
+        return
+      }
+      
+      const rowText = rowGroups[rowIndex].text || rowGroups[rowIndex].words.map(w => w.text).join(' ')
+      const rowWords = rowGroups[rowIndex].words
+      
+      // First check if name is IN the same row as cumulative scores (like "COO 62 X 72...")
       let bowlerName: string | undefined = undefined
-      for (let i = rowIndex - 1; i >= Math.max(0, rowIndex - 5); i--) {
-        const rowWords = rowGroups[i].words
-        const rowText = rowWords.map(w => w.text).join(' ')
-        
-        // Look for words on the left side (X < 300) that look like names (mostly letters)
-        const nameWords = rowWords.filter(w => {
-          const text = w.text.trim()
-          const isLeftSide = w.bbox.x0 < 300
-          const isMostlyLetters = /^[A-Z]{2,}$/i.test(text) && text.length >= 2 && text.length <= 10
-          return isLeftSide && isMostlyLetters && !/^\d+$/.test(text)
-        })
-        
-        if (nameWords.length > 0) {
-          bowlerName = nameWords[0].text.trim()
-          console.log(`Found bowler name "${bowlerName}" above cumulative scores at row ${i} (Y=${rowGroups[i].avgY.toFixed(0)})`)
-          break
-        }
-        
-        // Also check if the row text itself looks like a name (for cases where name spans multiple words)
-        const leftSideText = rowWords.filter(w => w.bbox.x0 < 300).map(w => w.text.trim()).join(' ')
-        if (/^[A-Z]{2,}(\s+[A-Z]+)?$/i.test(leftSideText) && leftSideText.length >= 2 && leftSideText.length <= 15) {
-          bowlerName = leftSideText.split(/\s+/)[0] // Take first word
-          console.log(`Found bowler name "${bowlerName}" from row text "${leftSideText}" at row ${i}`)
-          break
+      const nameWords = rowWords.filter(w => {
+        const text = w.text.trim()
+        const isLeftSide = w.bbox.x0 < 300
+        const isMostlyLetters = /^[A-Z]{2,}$/i.test(text) && text.length >= 2 && text.length <= 10
+        return isLeftSide && isMostlyLetters && !/^\d+$/.test(text) && text !== 'Tot' && text !== 'TOT'
+      })
+      
+      if (nameWords.length > 0) {
+        bowlerName = nameWords[0].text.trim()
+        console.log(`Found bowler name "${bowlerName}" IN cumulative score row at row ${rowIndex}`)
+      }
+      
+      // If no name in same row, look backwards
+      if (!bowlerName) {
+        for (let i = rowIndex - 1; i >= Math.max(0, rowIndex - 5); i--) {
+          // Skip cumulative score rows
+          if (cumulativeScoreRows.some(cr => cr.rowIndex === i)) {
+            continue
+          }
+          
+          const checkRowWords = rowGroups[i].words
+          const checkRowText = rowGroups[i].text || checkRowWords.map(w => w.text).join(' ')
+          
+          const checkNameWords = checkRowWords.filter(w => {
+            const text = w.text.trim()
+            const isLeftSide = w.bbox.x0 < 300
+            const isMostlyLetters = /^[A-Z]{2,}$/i.test(text) && text.length >= 2 && text.length <= 10
+            return isLeftSide && isMostlyLetters && !/^\d+$/.test(text) && text !== 'Tot' && text !== 'TOT'
+          })
+          
+          if (checkNameWords.length > 0) {
+            bowlerName = checkNameWords[0].text.trim()
+            console.log(`Found bowler name "${bowlerName}" above cumulative scores at row ${i}`)
+            break
+          }
         }
       }
       
-      // Look for ball results row (should be 1-2 rows above cumulative scores)
+      // Skip duplicate bowler names
+      if (bowlerName && foundBowlerNames.has(bowlerName)) {
+        console.log(`Skipping duplicate bowler "${bowlerName}"`)
+        return
+      }
+      
+      if (bowlerName) {
+        foundBowlerNames.add(bowlerName)
+      }
+      
+      // Look for ball results row
       let ballResultsWords: any[] = []
-      for (let i = rowIndex - 1; i >= Math.max(0, rowIndex - 4); i--) {
-        const rowWords = rowGroups[i].words
-        const rowText = rowWords.map(w => w.text).join(' ')
-        
-        // Check if this row has bowling-specific characters (X, /, or many numbers)
-        const hasStrikeOrSpare = /[Xx\/]/.test(rowText)
-        const digitCount = (rowText.match(/\d/g) || []).length
-        const letterCount = (rowText.match(/[A-Za-z]/g) || []).length
-        
-        // Ball results rows typically have X, /, or at least 5-6 numbers, and minimal letters
-        if ((hasStrikeOrSpare || digitCount >= 6) && letterCount < 5) {
-          // Sort by X coordinate to get the sequence
-          ballResultsWords = [...rowWords].sort((a, b) => a.bbox.x0 - b.bbox.x0)
-          console.log(`Found ball results row above cumulative scores: "${rowText}"`)
-          break
+      
+      // First check if ball results are in the same row (mixed with cumulative scores)
+      if (bowlerName && rowText.includes(bowlerName)) {
+        const afterName = rowText.substring(rowText.indexOf(bowlerName) + bowlerName.length)
+        if (/[Xx\/\d]/.test(afterName)) {
+          ballResultsWords = rowWords
+            .filter(w => {
+              const wordText = w.text.trim()
+              if (w.bbox.x0 < 300 && /^[A-Z]{2,}$/i.test(wordText) && wordText === bowlerName) {
+                return false // Skip the name
+              }
+              return true
+            })
+            .sort((a, b) => a.bbox.x0 - b.bbox.x0)
+          console.log(`Found ball results in same row as cumulative scores for ${bowlerName}`)
         }
       }
+      
+      // If not in same row, look above
+      if (ballResultsWords.length === 0) {
+        for (let i = rowIndex - 1; i >= Math.max(0, rowIndex - 4); i--) {
+          if (cumulativeScoreRows.some(cr => cr.rowIndex === i)) {
+            continue
+          }
+          
+          const checkRowWords = rowGroups[i].words
+          const checkRowText = rowGroups[i].text || checkRowWords.map(w => w.text).join(' ')
+          
+          const hasStrikeOrSpare = /[Xx\/]/.test(checkRowText)
+          const digitCount = (checkRowText.match(/\d/g) || []).length
+          const hasBowlerName = bowlerName ? checkRowText.includes(bowlerName) : false
+          
+          if ((hasStrikeOrSpare || digitCount >= 6 || hasBowlerName) && (hasBowlerName || (checkRowText.match(/[A-Za-z]/g) || []).length < 10)) {
+            ballResultsWords = [...checkRowWords].sort((a, b) => a.bbox.x0 - b.bbox.x0)
+            console.log(`Found ball results row above for ${bowlerName}: "${checkRowText.substring(0, 60)}..."`)
+            break
+          }
+        }
+      }
+      
+      usedCumulativeRows.add(rowIndex)
       
       // Parse individual ball results from the ball results row
       const individualBalls: Array<{ first: number | 'X' | null; second: number | '/' | 'X' | null; third?: number | 'X' | '/' | null }> = []
