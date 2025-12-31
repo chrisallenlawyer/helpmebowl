@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
               },
               features: [
                 {
-                  type: 'TEXT_DETECTION',
+                  type: 'DOCUMENT_TEXT_DETECTION', // Better for structured documents like scorecards
                   maxResults: 1,
                 },
               ],
@@ -76,6 +76,7 @@ export async function POST(request: NextRequest) {
     const words: Array<{
       text: string
       bbox: { x0: number; y0: number; x1: number; y1: number }
+      confidence?: number
     }> = []
 
     if (textAnnotations.length > 1) {
@@ -83,18 +84,57 @@ export async function POST(request: NextRequest) {
       textAnnotations.slice(1).forEach((annotation: any) => {
         const vertices = annotation.boundingPoly?.vertices || []
         if (vertices.length >= 2) {
+          // Calculate bounding box from vertices
+          const xCoords = vertices.map((v: any) => v.x || 0).filter((x: number) => x > 0)
+          const yCoords = vertices.map((v: any) => v.y || 0).filter((y: number) => y > 0)
+          
           words.push({
             text: annotation.description || '',
             bbox: {
-              x0: vertices[0].x || 0,
-              y0: vertices[0].y || 0,
-              x1: vertices[2]?.x || vertices[1]?.x || 0,
-              y1: vertices[2]?.y || vertices[1]?.y || 0,
+              x0: Math.min(...xCoords),
+              y0: Math.min(...yCoords),
+              x1: Math.max(...xCoords),
+              y1: Math.max(...yCoords),
             },
+            confidence: annotation.confidence,
           })
         }
       })
     }
+
+    // Also extract blocks, paragraphs, and words from fullTextAnnotation if available
+    // This gives us better structure for scorecards
+    const fullTextAnnotation = visionData.responses[0]?.fullTextAnnotation
+    const blocks = fullTextAnnotation?.pages?.[0]?.blocks || []
+    const paragraphs: Array<{
+      text: string
+      bbox: { x0: number; y0: number; x1: number; y1: number }
+    }> = []
+    
+    blocks.forEach((block: any) => {
+      block.paragraphs?.forEach((para: any) => {
+        const vertices = para.boundingBox?.vertices || []
+        if (vertices.length >= 2) {
+          const xCoords = vertices.map((v: any) => v.x || 0).filter((x: number) => x > 0)
+          const yCoords = vertices.map((v: any) => v.y || 0).filter((y: number) => y > 0)
+          
+          let paraText = ''
+          para.words?.forEach((word: any) => {
+            paraText += (word.symbols || []).map((s: any) => s.text || '').join('') + ' '
+          })
+          
+          paragraphs.push({
+            text: paraText.trim(),
+            bbox: {
+              x0: Math.min(...xCoords),
+              y0: Math.min(...yCoords),
+              x1: Math.max(...xCoords),
+              y1: Math.max(...yCoords),
+            },
+          })
+        }
+      })
+    })
 
     // Extract all numbers for reference
     const allNumbers: number[] = []
@@ -110,7 +150,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       text: fullText,
       words,
+      paragraphs, // Structured paragraphs with bounding boxes
       allNumbers,
+      rawResponse: visionData, // Include full response for debugging
     })
   } catch (error: any) {
     console.error('OCR API error:', error)
@@ -120,4 +162,6 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+
+
 

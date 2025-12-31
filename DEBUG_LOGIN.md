@@ -47,3 +47,5 @@ In the console, you should see these messages in order:
 - Check console logs to see if it gets to "REDIRECTING" message
 - May be a browser security issue blocking navigation
 
+
+

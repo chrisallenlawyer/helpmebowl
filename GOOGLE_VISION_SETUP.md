@@ -98,3 +98,5 @@ If the API key is not configured, the app will automatically fall back to Tesser
 - Verify the API key is set correctly
 - Check Vercel logs for API errors
 
+
+

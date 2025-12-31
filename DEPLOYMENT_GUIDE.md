@@ -231,3 +231,5 @@ When you're ready to add subscriptions:
 6. 🔄 Add OCR functionality
 7. 🔄 Set up Stripe for subscriptions
 
+
+

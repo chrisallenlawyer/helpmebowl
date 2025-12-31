@@ -87,3 +87,5 @@ If you want to skip email confirmation during development:
 
 After setting up the redirect URLs in Supabase, email confirmations should work properly!
 
+
+

@@ -12,3 +12,5 @@ CREATE INDEX IF NOT EXISTS idx_games_balls_used ON games USING GIN (balls_used);
 -- Create index for oil_pattern
 CREATE INDEX IF NOT EXISTS idx_games_oil_pattern ON games(oil_pattern);
 
+
+

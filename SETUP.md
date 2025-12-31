@@ -60,3 +60,5 @@ The migration file includes:
 - `STRIPE_SECRET_KEY`: Stripe secret key (server-side only)
 - `STRIPE_WEBHOOK_SECRET`: Stripe webhook secret for verifying webhook signatures
 
+
+

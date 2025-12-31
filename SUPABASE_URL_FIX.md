@@ -57,3 +57,5 @@ Since the old email link is expired, you need a new one:
 - Always use the correct URL format: `https://helpmebowl.vercel.app/auth/callback` (single https://)
 - Make sure both Supabase redirect URLs and Vercel environment variables match your actual domain
 
+
+

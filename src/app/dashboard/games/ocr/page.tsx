@@ -43,6 +43,8 @@ export default function OCRPage() {
     oil_pattern: '',
   })
   const [newBallName, setNewBallName] = useState('')
+  const [debugMode, setDebugMode] = useState(false)
+  const [rawOcrData, setRawOcrData] = useState<any>(null)
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -141,7 +143,11 @@ export default function OCRPage() {
       ocrText = ocrData.text || ''
       ocrWords = ocrData.words || []
       
+      // Store raw data for debugging
+      setRawOcrData(ocrData)
+      
       console.log('Google Vision OCR successful')
+      console.log('Full OCR data:', ocrData)
       
       // Parse bowling scores from OCR text
       const bowlers = parseBowlingScores(ocrText, ocrWords)
@@ -955,13 +961,98 @@ export default function OCRPage() {
         >
           ← Back to games
         </Link>
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">OCR Score Recognition</h1>
-        <p className="mt-1 text-sm text-gray-500">Take or upload a photo of your bowling score</p>
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">OCR Score Recognition</h1>
+            <p className="mt-1 text-sm text-gray-500">Take or upload a photo of your bowling score</p>
+          </div>
+          <button
+            onClick={() => setDebugMode(!debugMode)}
+            className={`px-4 py-2 rounded-md text-sm font-medium ${
+              debugMode
+                ? 'bg-yellow-500 text-yellow-900 hover:bg-yellow-600'
+                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+            }`}
+          >
+            {debugMode ? '🔍 Hide Debug' : '🔍 Show Debug'}
+          </button>
+        </div>
       </div>
 
       {error && (
         <div className="bg-red-50 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
           {error}
+        </div>
+      )}
+
+      {/* Debug Mode Panel */}
+      {debugMode && rawOcrData && (
+        <div className="bg-gray-50 border border-gray-300 rounded-lg p-6 mb-6">
+          <h2 className="text-xl font-bold text-gray-900 mb-4">🔍 Debug: Raw OCR Data</h2>
+          
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 mb-2">Full Text:</h3>
+              <pre className="bg-white p-3 rounded border text-xs overflow-auto max-h-40">
+                {rawOcrData.text || 'No text detected'}
+              </pre>
+            </div>
+
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 mb-2">Words ({rawOcrData.words?.length || 0}):</h3>
+              <div className="bg-white p-3 rounded border max-h-60 overflow-auto">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                  {rawOcrData.words?.slice(0, 50).map((word: any, idx: number) => (
+                    <div key={idx} className="border-b pb-1">
+                      <span className="font-mono">{word.text}</span>
+                      <span className="text-gray-500 ml-2">
+                        ({word.bbox.x0}, {word.bbox.y0}) - ({word.bbox.x1}, {word.bbox.y1})
+                      </span>
+                    </div>
+                  ))}
+                  {rawOcrData.words?.length > 50 && (
+                    <div className="text-gray-500 italic">... and {rawOcrData.words.length - 50} more words</div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {rawOcrData.paragraphs && rawOcrData.paragraphs.length > 0 && (
+              <div>
+                <h3 className="text-sm font-semibold text-gray-700 mb-2">Paragraphs ({rawOcrData.paragraphs.length}):</h3>
+                <div className="bg-white p-3 rounded border max-h-60 overflow-auto">
+                  {rawOcrData.paragraphs.map((para: any, idx: number) => (
+                    <div key={idx} className="mb-2 pb-2 border-b text-sm">
+                      <div className="font-mono">{para.text}</div>
+                      <div className="text-gray-500 text-xs mt-1">
+                        Y: {para.bbox.y0} - {para.bbox.y1} | X: {para.bbox.x0} - {para.bbox.x1}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 mb-2">All Numbers Detected:</h3>
+              <div className="bg-white p-3 rounded border">
+                <div className="flex flex-wrap gap-2">
+                  {rawOcrData.allNumbers?.map((num: number, idx: number) => (
+                    <span key={idx} className="px-2 py-1 bg-blue-100 rounded text-sm">{num}</span>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <details className="bg-white p-3 rounded border">
+              <summary className="cursor-pointer text-sm font-semibold text-gray-700">
+                Raw API Response (JSON)
+              </summary>
+              <pre className="mt-2 text-xs overflow-auto max-h-96">
+                {JSON.stringify(rawOcrData.rawResponse || rawOcrData, null, 2)}
+              </pre>
+            </details>
+          </div>
         </div>
       )}
 
