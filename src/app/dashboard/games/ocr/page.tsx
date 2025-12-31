@@ -382,13 +382,13 @@ export default function OCRPage() {
             } else {
               // Try to parse open frame (two numbers)
               const numbers = frameText.match(/\d+/g) || []
-              if (numbers.length >= 1) {
+              if (numbers.length >= 1 && numbers[0]) {
                 first = parseInt(numbers[0]) as any
               }
-              if (numbers.length >= 2) {
+              if (numbers.length >= 2 && numbers[1]) {
                 second = parseInt(numbers[1]) as any
               }
-              if (frameNum === 9 && numbers.length >= 3) {
+              if (frameNum === 9 && numbers.length >= 3 && numbers[2]) {
                 third = parseInt(numbers[2]) as any
               }
             }
